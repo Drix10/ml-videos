@@ -11,6 +11,7 @@ ARENA_W, ARENA_H = 500, 380
 # Colors: gold-on-midnight (not pink-on-black)
 BG_COLOR = (10, 13, 26)
 ARENA_COLOR = (15, 20, 38)
+ARENA_BORDER = (110, 120, 165)  # bright rounded outline around the arena
 OWL_COLOR = (245, 247, 255)
 MOUSE_COLOR = (228, 234, 248)
 ACCENT = (255, 182, 64)       # learned / strong / new

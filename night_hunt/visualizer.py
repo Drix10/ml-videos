@@ -208,6 +208,8 @@ def draw_arena(surf, arena):
     pygame.draw.circle(surf, config.BG_COLOR, (int(ex), int(ey)), 3 * S)
     pygame.draw.circle(surf, A, (int(o.x * S), int(o.y * S)), 28 * S, 2)
     left = sum(m.alive for m in arena.mice)  # counter on quiet backing
+    mark = font(14, True).render("drix10.com", True, config.TEXT_GRAY)
+    surf.blit(mark, (12 * S, 8 * S))
     n = font(22, True, mono=True).render(f"{left} / {config.NUM_MICE}", True, A)
     nr = n.get_rect(topright=(W - 12 * S, 8 * S))
     pygame.draw.rect(surf, config.ARENA_COLOR, nr.inflate(12 * S, 6 * S),
@@ -215,3 +217,5 @@ def draw_arena(surf, arena):
     surf.blit(n, nr)
     t = font(13).render("MICE LEFT", True, config.TEXT_GRAY)
     surf.blit(t, t.get_rect(topright=(W - 12 * S, 40 * S)))
+    pygame.draw.rect(surf, config.ARENA_BORDER, (0, 0, W, H), 2,
+                     border_radius=8 * S)  # bright outline, drawn last
