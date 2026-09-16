@@ -67,7 +67,7 @@ LEVELS = [
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "read the lunge before",
      "description": "Cuts away early; the owl overshoots.",
-     "threshold": 1500, "min_gens": 10},
+     "threshold": 1300, "min_gens": 10},
     {"name": "walls",     "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
      "caption": "learn the edges so",
