@@ -21,13 +21,12 @@ TEXT_GRAY = (130, 138, 170)
 # Game
 NUM_MICE = 32
 OWL_RADIUS = 16
-MOUSE_RADIUS = 5
 CATCH_RADIUS = 12
 OWL_SPEED = 3.2       # fixed threat: faster than any mouse
 OWL_TURN = 0.045       # ...but turns wide, so early cutaways work
 MOUSE_SPEED = 3.0
 TURN_RATE = 0.06      # mouse steering agility
-FISH_MARGIN = 7       # mice bounce inside this inset (no edge clipping)
+ARENA_MARGIN = 7       # mice bounce inside this inset (no edge clipping)
 MAX_TRAIL = 20
 
 # Brain (inputs grow per level; hidden/output fixed)
@@ -44,7 +43,6 @@ EPISODE_LENGTH = 1800  # 30s at 60fps
 
 # Fitness shaping
 SURVIVE_BONUS = 100.0  # nobody caught before timeout
-IDLE_PENALTY = 0.0     # surviving IS the job; no per-frame tax
 RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
@@ -54,7 +52,7 @@ LEVELS = [
     {"name": "blind",     "inputs": ["bias"],
      "caption": "no senses, no fear, so",
      "description": "Knows nothing. Drifts.",
-     "threshold": 1250, "min_gens": 10},
+     "threshold": 1200, "min_gens": 10},
     {"name": "proximity", "inputs": ["bias", "dist"],
      "caption": "feel how near it",
      "description": "Bolts when it nears — but which way?",
@@ -62,7 +60,7 @@ LEVELS = [
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "sense where from, and",
      "description": "Finally flees the right way.",
-     "threshold": 1750, "min_gens": 10},
+     "threshold": 1500, "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "read the lunge before",
      "description": "Cuts away early; the owl overshoots.",

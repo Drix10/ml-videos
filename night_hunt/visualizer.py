@@ -32,7 +32,7 @@ def _edges(surf, pairs):
             pygame.draw.line(surf, color, a, b, t)
 
 
-def draw_network(surf, brain, obs, level_idx, out=0.0, new_inputs=0, fresh=False):
+def draw_network(surf, brain, obs, level_idx, new_inputs=0, fresh=False):
     """Rings + labels only. Newest senses glow gold; two-tone level line below."""
     surf.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
@@ -125,7 +125,7 @@ def draw_arena(surf, arena):
     pygame.draw.rect(surf, config.ARENA_COLOR, nr.inflate(12, 6), border_radius=4)
     surf.blit(n, nr)
     t = font(13).render("MICE LEFT", True, config.TEXT_GRAY)
-    surf.blit(t, t.get_rect(topright=(config.ARENA_W - 12, 34)))
+    surf.blit(t, t.get_rect(topright=(config.ARENA_W - 12, 40)))
 
 
 def draw_caption(surf, text):

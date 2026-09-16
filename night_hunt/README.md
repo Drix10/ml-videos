@@ -50,7 +50,7 @@ then step an `Arena(brain, level_idx)`.
 
 | Level | Name | Senses | To pass (mean survived frames) |
 |---|---|---|---|
-| 1 | blind | `bias` | 1250 |
+| 1 | blind | `bias` | 1200 |
 | 2 | proximity | + `dist` | 1350 |
 | 3 | direction | + `dir x`, `dir y` | 1500 |
 | 4 | intent | + `closing` | 1600 |

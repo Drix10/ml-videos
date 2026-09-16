@@ -50,7 +50,7 @@ def level_up_population(pop, fitness, new_size):
 
 def main():
     pygame.init()
-    pygame.display.set_caption("Shark Neuroevolution")
+    pygame.display.set_caption("Night Hunt")
     screen = pygame.display.set_mode((config.WIDTH, config.HEIGHT))
     nx, ny, nw, nh = config.NETWORK_RECT
     gx, gy, _, _ = config.GAME_RECT
@@ -80,7 +80,6 @@ def main():
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
     try:
         while True:
-            n_in = len(config.LEVELS[level]["inputs"])
             fit = np.empty(len(pop)); ate = np.empty(len(pop))  # chunked eval
             for i, b in enumerate(pop):  # averaged: a luck spike can't dominate
                 for e in pygame.event.get():
@@ -101,15 +100,15 @@ def main():
             prune_checkpoints()
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
                   f"best {fit.max():.1f}/{config.LEVELS[level]['threshold']:.0f} "
-                  f"catch {ate[bi]:.0f}/{config.NUM_MICE} "
-                  f"mean {fit.mean():.1f} (catch {ate.mean():.1f}) "
+                  f"lost {ate[bi]:.0f}/{config.NUM_MICE} "
+                  f"mean {fit.mean():.1f} (lost {ate.mean():.1f}) "
                   f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
                   flush=True)
             pygame.display.set_caption(
-                f"Shark Neuroevolution — L{level + 1} gen {gen} best {fit.max():.0f}")
+                f"Night Hunt — L{level + 1} gen {gen} best {fit.max():.0f}")
 
-            arena = Arena(best, level)  # rendered replay of best brain
-            fresh = gen < 3  # highlight brand-new senses for first 3 replays
+            arena = Arena(best, level)  # rendered replay of best school
+            show_new = gen < 3  # highlight brand-new senses for first 3 replays
             prev_n = len(config.LEVELS[level - 1]["inputs"]) if level > 0 else 0
             new_n = len(config.LEVELS[level]["inputs"]) - prev_n
             for _ in range(0 if SKIP_REPLAY else config.EPISODE_LENGTH):
@@ -121,13 +120,17 @@ def main():
                         skip = True
                 if skip or arena.step():
                     break
-                visualizer.draw_network(panel, best, arena.obs, level, arena.out, new_n, fresh)
+                visualizer.draw_network(panel, best, arena.obs, level, new_n, show_new)
                 visualizer.draw_arena(game, arena)
                 visualizer.draw_caption(screen, config.LEVELS[level]["caption"])
                 pygame.display.flip()
                 clock.tick(config.FPS)
 
             lvl = config.LEVELS[level]
+            total += 1  # every generation counts, level-up or not
+            if MAX_GENS and total >= MAX_GENS:
+                print(f"[monitor] capped at {total} generations", flush=True)
+                return
             if level < len(config.LEVELS) - 1 and gen + 1 >= lvl["min_gens"] \
                     and fit.max() >= lvl["threshold"]:
                 level += 1  # grow brains, keep learned weights
@@ -138,10 +141,6 @@ def main():
                 continue
             pop = next_generation(pop, fit)
             gen += 1
-            total += 1
-            if MAX_GENS and total >= MAX_GENS:
-                print(f"[monitor] capped at {total} generations", flush=True)
-                return
     finally:
         log.close()
         pygame.quit()

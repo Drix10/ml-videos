@@ -7,7 +7,7 @@ import config
 
 
 def spawn_pos(rng, owl_xy=None, min_dist=config.RESPAWN_MIN_DIST):
-    m = config.FISH_MARGIN
+    m = config.ARENA_MARGIN
     p = rng.uniform([m, m], [config.ARENA_W - m, config.ARENA_H - m])
     for _ in range(20):  # rejection-sample away from the owl
         if owl_xy is None or np.linalg.norm(p - np.asarray(owl_xy)) >= min_dist:
@@ -49,7 +49,7 @@ class Mouse:
         self.angle = (self.angle + turn * config.TURN_RATE) % (2 * math.pi)
         self.x += math.cos(self.angle) * config.MOUSE_SPEED
         self.y += math.sin(self.angle) * config.MOUSE_SPEED
-        m = config.FISH_MARGIN
+        m = config.ARENA_MARGIN
         if self.x < m or self.x > config.ARENA_W - m:
             self.angle = math.pi - self.angle
             self.x = min(max(self.x, m), config.ARENA_W - m)
