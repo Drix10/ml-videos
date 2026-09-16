@@ -26,7 +26,7 @@ class Spark:  # catch-burst mote: flies out, fades fast
         self.life -= 0.06
 
 
-def _episode_step(brain, owl, mice, rng, level_idx):
+def _episode_step(brain, owl, mice, level_idx):
     """Shared physics: owl hunts, live mice steer via ONE batched forward pass."""
     owl.update(mice)
     alive = [m for m in mice if m.alive]
@@ -55,26 +55,25 @@ def simulate(brain, level_idx, rng=None, steps=config.EPISODE_LENGTH,
     """Run one episode headless. Returns (fitness, mice_caught)."""
     rng = rng or np.random.default_rng()
     owl = Owl()
-    mice = [Mouse(brain, rng, (owl.x, owl.y)) for _ in range(n_mice)]
+    mice = [Mouse(rng, (owl.x, owl.y)) for _ in range(n_mice)]
     caught = 0
     for _ in range(steps):
-        caught += _episode_step(brain, owl, mice, rng, level_idx)
+        caught += _episode_step(brain, owl, mice, level_idx)
         if caught >= n_mice:
             break
     return _fitness(mice, caught), caught
 
 
-class Arena:  # live, renderable episode of one school (for main.py replay)
+class Arena:  # live, renderable episode of one school (showcase replays)
     def __init__(self, brain, level_idx, rng=None):
         self.rng = rng or np.random.default_rng()
         self.level_idx = level_idx
         self.brain = brain
         self.owl = Owl()
-        self.mice = [Mouse(brain, self.rng, (self.owl.x, self.owl.y))
+        self.mice = [Mouse(self.rng, (self.owl.x, self.owl.y))
                      for _ in range(config.NUM_MICE)]
         n_in = len(config.LEVELS[level_idx]["inputs"])
         self.obs = np.zeros(n_in, dtype=np.float32)
-        self.out = 0.0
         self.caught = 0
         self.flash = 0  # catch-burst ring timer
         self.sparks = []  # live particles
@@ -88,8 +87,7 @@ class Arena:  # live, renderable episode of one school (for main.py replay)
     def step(self):
         f = self._focus()
         self.obs = f.get_inputs(self.owl, self.level_idx)
-        self.out = float(self.brain.act(self.obs)[0])
-        n = _episode_step(self.brain, self.owl, self.mice, self.rng, self.level_idx)
+        n = _episode_step(self.brain, self.owl, self.mice, self.level_idx)
         if n:
             self.caught += n
             self.flash = 20

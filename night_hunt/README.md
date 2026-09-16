@@ -17,10 +17,10 @@ around it.
 ## How it works (simple version)
 
 - Every mouse in a school runs the **same brain**: senses in, turn direction out.
-- One episode = 30 seconds of owl vs school. Score = average seconds lived.
-- Each brain plays 3 episodes (so one lucky run can't fool us).
+- One episode = 1800 frames (30s) of owl vs school. Score = mean frames lived.
+- Each brain plays 3 identical layouts per generation (fair comparison).
 - Best 20% survive unchanged. The rest are bred from winners + small mutations.
-- Beat the level's score after 10+ generations → brains grow the next sense,
+- Beat the level's bar after 10+ generations → brains grow the next sense,
   keeping everything already learned.
 
 ## Two ways to run
@@ -42,15 +42,13 @@ around it.
 ```bash
 cd night_hunt
 pip install -r requirements.txt
-python main.py
+python main.py          # headless training, console only
+python main.py showcase # the video, once training finishes
 ```
 
-Watch the best school replay each generation. `SPACE` skips boring ones.
-`SHOW_BEST_ONLY` (default on) trains each level headless and replays only
-the level-winning school — one showcase replay per stage, no filler.
-Level-ups hit a gold flash with the new sense held full-screen (edit point).
-Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
-Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
+Training never opens a window. Replays run at 60 FPS; training is
+frame-counted, so only replay pace changes. Run one trainer per folder
+(rows interleave otherwise).
 
 ## The 6 levels
 
@@ -61,7 +59,7 @@ Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
 | 3 · direction | where it's coming from | 1230 |
 | 4 · intent | is it closing in | 1300 |
 | 5 · walls | where the edges are | 1550 |
-| 6 · full sense | exact owl position | evolves forever |
+| 6 · full sense | exact owl position | 1800 (finale) |
 
 ## Reading the screen
 
@@ -76,8 +74,12 @@ Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
 `owl.py` (fixed hunter) · `environment.py` (episodes) ·
 `evolution.py` (breeding) · `visualizer.py` (drawing) · `main.py` (run it)
 
+Env knobs: `MAX_GENS` (cap a session) · `RESUME=1` (pick up where it died) ·
+`SHOWCASE=1` (same as `showcase`) · `LOG_DIR`/`CKPT_DIR` (isolated test runs).
+
 ## If it gets stuck
 
-A level that can't pass in ~25 generations has its bar too high — lower that
-level's `threshold` in `config.py` and restart. Falling `lost-mean` in the
-console means it's learning.
+It unsticks itself: 30 stalled generations triggers `[autobar]`, which drops
+the bar to the median of recent bests + 10. Falling `lost-mean` in the
+console means it's learning. Interrupted? `RESUME=1 python main.py` picks up
+where it died.

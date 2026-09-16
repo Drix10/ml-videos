@@ -29,7 +29,7 @@ taught itself to survive. Follow for more.
 | Add direction; flee the right way; never programmed | 3 · direction (`dir x`, `dir y`) | GA discovers aimed fleeing |
 | Closing speed; cut away; predator overshoots | 4 · intent (`closing`) | Owl turns wide (`OWL_TURN`), early cutaways win |
 | Wall sensors; stop cornering | 5 · walls (4 sensors) | Margin bounces + corner awareness |
-| Full senses; untouchable | 6 · full sense (`aim x`, `aim y`) | Evolves forever; finale = near-zero catches |
+| Full senses; untouchable | 6 · full sense (`aim x`, `aim y`) | Ends on 1800: near-zero catches |
 
 Our cast swap (owl/mice, gold-on-midnight) changes the skin, never the story:
 fixed predator vs evolving prey, survival fitness, countdown counter.

@@ -10,6 +10,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # logs/ land here
 import numpy as np
 import pygame
 import torch
@@ -22,6 +23,10 @@ from model import Brain
 
 os.makedirs("checkpoints", exist_ok=True)
 os.makedirs("logs", exist_ok=True)
+LOGD = os.environ.get("LOG_DIR", "logs")  # smoke tests point these at /tmp
+CKPTD = os.environ.get("CKPT_DIR", "checkpoints")
+os.makedirs(LOGD, exist_ok=True)
+os.makedirs(CKPTD, exist_ok=True)
 S = config.UI_SCALE  # device pixels per logical unit (2 = 1080x1920)
 MAX_GENS = int(os.environ.get("MAX_GENS", "0") or 0)  # 0 = endless
 RESUME = bool(os.environ.get("RESUME", ""))  # pick up from checkpoints/resume.pt
@@ -30,18 +35,18 @@ def prune_checkpoints():
     import csv as _csv
     keep = set()  # each level's all-time best must survive for showcase
     try:
-        with open("logs/fitness.csv") as f:
+        with open(f"{LOGD}/fitness.csv") as f:
             best = {}
             for row in _csv.DictReader(f):
                 lv, g = int(row["level"]), int(row["generation"])
                 ft = float(row["best"])
                 if lv not in best or ft > best[lv][1]:
                     best[lv] = (g, ft)
-            keep = {os.path.normpath(f"checkpoints/best_L{lv}_gen{g}.pt")
+            keep = {os.path.normpath(f"{CKPTD}/best_L{lv}_gen{g}.pt")
                     for lv, (g, _) in best.items()}
     except FileNotFoundError:
         pass
-    files = sorted(glob.glob("checkpoints/best_*.pt"), key=os.path.getmtime)
+    files = sorted(glob.glob(f"{CKPTD}/best_*.pt"), key=os.path.getmtime)
     for f in files[:max(0, len(files) - config.MAX_CHECKPOINTS)]:
         if os.path.normpath(f) not in keep:
             os.remove(f)
@@ -63,8 +68,8 @@ def show_card(screen, clock, lv):
     pygame.display.flip()
     pygame.time.wait(120)
     lvl = config.LEVELS[lv]
-    sense = " + ".join(lvl["inputs"][-2:] if len(lvl["inputs"]) > 1
-                        else lvl["inputs"])
+    prev = config.LEVELS[lv - 1]["inputs"] if lv > 0 else []
+    sense = " + ".join(lvl["inputs"][len(prev):])  # only the NEW senses
     tag = visualizer.font(13, True).render(f"LEVEL {lv + 1}", True,
                                            config.BG_COLOR)
     br = tag.get_rect(center=(screen.get_size()[0] / 2,
@@ -106,7 +111,7 @@ def showcase(screen, panel, game, clock, only=()):
     import csv as _csv
     best = {}  # level -> (gen, fit)
     try:
-        with open("logs/fitness.csv") as f:
+        with open(f"{LOGD}/fitness.csv") as f:
             for row in _csv.DictReader(f):
                 lv, g, ft = int(row["level"]), int(row["generation"]), float(row["best"])
                 if lv not in best or ft > best[lv][1]:
@@ -124,10 +129,11 @@ def showcase(screen, panel, game, clock, only=()):
         played = True
         g, ft = best[lv]
         try:
-            brain = Brain.load(f"checkpoints/best_L{lv}_gen{g}.pt",
+            brain = Brain.load(f"{CKPTD}/best_L{lv}_gen{g}.pt",
                                len(config.LEVELS[lv - 1]["inputs"]))
-        except FileNotFoundError:
-            print(f"[showcase] L{lv} gen {g} pruned, skipping", flush=True)
+        except (FileNotFoundError, RuntimeError) as ex:
+            print(f"[showcase] L{lv} gen {g} unreadable ({ex}), skipping",
+                  flush=True)
             continue
         print(f"[showcase] Level {lv} gen {g} (fit {ft:.0f}) — SPACE for next", flush=True)
         arena = Arena(brain, lv - 1)
@@ -178,16 +184,16 @@ def main():
           "record later with `python main.py showcase`.", flush=True)
     HEADER = ["level", "generation", "best", "mean", "worst",
               "catch_best", "catch_mean"]
-    log_path = "logs/fitness.csv"
+    log_path = f"{LOGD}/fitness.csv"
     if os.path.exists(log_path) and os.path.getsize(log_path):
         with open(log_path) as f:  # schema changed? archive, start clean
             if f.readline().strip() != ",".join(HEADER):
                 try:
                     os.rename(log_path,
-                              f"logs/fitness_legacy_{int(__import__('time').time())}.csv")
+                              f"{LOGD}/fitness_legacy_{int(__import__('time').time())}.csv")
                 except PermissionError:  # live run holds it: use session file
                     stamp = int(__import__('time').time())
-                    log_path = f"logs/fitness_run_{stamp}.csv"
+                    log_path = f"{LOGD}/fitness_run_{stamp}.csv"
                     print(f"[log] fitness.csv locked, writing {log_path}", flush=True)
     fresh = not os.path.exists(log_path) or os.path.getsize(log_path) == 0
     log = open(log_path, "a", newline="")  # append: "w" wiped history
@@ -199,17 +205,20 @@ def main():
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
     bars = {}  # level -> current bar (autobar may lower a wall, loudly)
     hist = []  # recent gen-bests at this level (autobar's evidence)
-    snap_path = "checkpoints/resume.pt"
+    snap_path = f"{CKPTD}/resume.pt"
     if RESUME and os.path.exists(snap_path):
         snap = torch.load(snap_path, map_location="cpu", weights_only=True)
-        level, gen, total = snap["level"], snap["gen"], snap["total"]
-        pop = [Brain(len(config.LEVELS[level]["inputs"]))
-               for _ in range(config.POPULATION_SIZE)]
-        for b, sd in zip(pop, snap["pop"]):
-            b.load_state_dict(sd)
-        bars = snap.get("bars", {})
-        print(f"[resume] Level {level + 1} gen {gen} ({total} gens so far)",
-              flush=True)
+        if len(snap["pop"]) != config.POPULATION_SIZE:
+            print("[resume] population size changed, starting fresh", flush=True)
+        else:
+            level, gen, total = snap["level"], snap["gen"], snap["total"]
+            pop = [Brain(len(config.LEVELS[level]["inputs"]))
+                   for _ in range(config.POPULATION_SIZE)]
+            for b, sd in zip(pop, snap["pop"]):
+                b.load_state_dict(sd)
+            bars = snap.get("bars", {})
+            print(f"[resume] Level {level + 1} gen {gen} "
+                  f"({total} gens so far)", flush=True)
     try:
         while True:  # headless: evaluate, log, evolve. No window, no events.
             fit = np.empty(len(pop)); ate = np.empty(len(pop))  # chunked eval
@@ -233,7 +242,7 @@ def main():
                          round(float(fit.mean()), 1), round(float(fit.min()), 1),
                          int(round(ate[bi])), round(float(ate.mean()), 1)])
             log.flush()
-            best.save(f"checkpoints/best_L{level + 1}_gen{gen}.pt")
+            best.save(f"{CKPTD}/best_L{level + 1}_gen{gen}.pt")
             prune_checkpoints()
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
                   f"best {fit.max():.1f}/{bar:.0f} "
@@ -263,7 +272,7 @@ def main():
                 return
             if finale:
                 print(f"*** FINALE CLEARED ({fit.max():.0f} >= "
-                      f"{config.FINALE_TARGET}) — run `python main.py showcase` "
+                      f"{bar:.0f}) — run `python main.py showcase` "
                       f"to record the video ***", flush=True)
                 return
             if leveling:  # grow brains, keep learned weights

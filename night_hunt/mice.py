@@ -17,8 +17,7 @@ def spawn_pos(rng, owl_xy=None, min_dist=config.RESPAWN_MIN_DIST):
 
 
 class Mouse:
-    def __init__(self, brain, rng, owl_xy=None):
-        self.brain = brain
+    def __init__(self, rng, owl_xy=None):
         self.x, self.y = spawn_pos(rng, owl_xy)
         self.angle = float(rng.uniform(0, 2 * math.pi))
         self.alive = True

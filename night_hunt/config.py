@@ -78,5 +78,5 @@ LEVELS = [
                                       "aim x", "aim y"],
      "caption": "untouchable now, and",
      "description": "A brain from nothing. Still here.",
-     "threshold": float("inf"), "min_gens": float("inf")},  # finale: evolves forever
+     "threshold": float("inf"), "min_gens": 10},  # finale ends on FINALE_TARGET
 ]

@@ -1,5 +1,5 @@
 """Night-hunt UI: gold-on-midnight, rendered at UI_SCALE for crisp footage.
-All geometry is authored in logical units (540x860) and scaled at draw time;
+All geometry is authored in logical units (540x960) and scaled at draw time;
 stroke widths stay hairline so lines never go fluffy."""
 import math
 
@@ -91,7 +91,10 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     P = lambda p: (p[0] * S, p[1] * S)  # logical -> device
     G = lambda p: (p[0] * S * SS, p[1] * S * SS)  # logical -> supersampled
     key = (surf.get_size(), id(brain))
-    layer = None if sliding else _SS.get(key)
+    layer = None
+    hit = _SS.get(key)
+    if hit is not None and hit[1] is brain and not sliding:
+        layer = hit[0]  # same object: reuse. (id() alone lies after gc.)
     if layer is None:  # static layer: edges + gray base rings, baked once/brain
         ss = _SS.get(surf.get_size())
         if ss is None:  # one reusable buffer per panel size (no per-frame alloc)
@@ -115,7 +118,7 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
         layer = pygame.Surface(surf.get_size())
         pygame.transform.smoothscale(ss, surf.get_size(), layer)
         if not sliding:  # weights frozen mid-replay: keep 2 zeitgeists max
-            _SS[key] = layer
+            _SS[key] = (layer, brain)
             baked = [k for k in _SS if isinstance(k, tuple) and len(k) == 2
                      and isinstance(k[0], tuple)]
             for k in baked[:-2]:
