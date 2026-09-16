@@ -29,6 +29,14 @@ around it.
 - `SHOWCASE=1 python main.py` — after training, plays each level's all-time
   best school back-to-back for recording. `SPACE` jumps ahead.
 
+## Two ways to run
+
+- `python main.py` — trains level by level, replaying only level-winners.
+- `SHOWCASE=1 python main.py` — after training, plays each level's all-time
+  best school back-to-back for recording. `SPACE` jumps ahead.
+- `python main.py showcase 2 5` — replay only those levels' bests.
+- Background training: `MAX_GENS=200 SKIP_REPLAY=1 nohup python main.py > train.log 2>&1 &`
+
 ## Run it
 
 ```bash
