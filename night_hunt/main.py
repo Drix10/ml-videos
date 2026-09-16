@@ -108,7 +108,6 @@ def main():
                 f"Night Hunt — L{level + 1} gen {gen} best {fit.max():.0f}")
 
             arena = Arena(best, level)  # rendered replay of best school
-            show_new = gen < 3  # highlight brand-new senses for first 3 replays
             prev_n = len(config.LEVELS[level - 1]["inputs"]) if level > 0 else 0
             new_n = len(config.LEVELS[level]["inputs"]) - prev_n
             for _ in range(0 if SKIP_REPLAY else config.EPISODE_LENGTH):
@@ -120,7 +119,7 @@ def main():
                         skip = True
                 if skip or arena.step():
                     break
-                visualizer.draw_network(panel, best, arena.obs, level, new_n, show_new)
+                visualizer.draw_network(panel, best, arena.obs, level, new_n)
                 visualizer.draw_arena(game, arena)
                 visualizer.draw_caption(screen, config.LEVELS[level]["caption"])
                 pygame.display.flip()

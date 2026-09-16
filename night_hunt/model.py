@@ -12,6 +12,9 @@ class Brain(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, output_size)
+        with torch.no_grad():  # start near-silent: thin gray lines, gold is EARNED
+            for p in self.parameters():
+                p.uniform_(-0.25, 0.25)
 
     def forward(self, x):
         return torch.tanh(self.fc2(torch.relu(self.fc1(x))))

@@ -32,8 +32,9 @@ def _edges(surf, pairs):
             pygame.draw.line(surf, color, a, b, t)
 
 
-def draw_network(surf, brain, obs, level_idx, new_inputs=0, fresh=False):
-    """Rings + labels only. Newest senses glow gold; two-tone level line below."""
+def draw_network(surf, brain, obs, level_idx, new_inputs=0):
+    """Rings + labels only. This level's own senses stay gold (like the reference);
+    older ones glow gold only while their live signal is strong."""
     surf.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
     names = lvl["inputs"]
@@ -43,7 +44,7 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0, fresh=False):
     n_hid = config.HIDDEN_NODES
 
     ix, hx, ox = 130, 265, 415  # centered fan with airy margins
-    top0, bot = 80, H - 64
+    top0, bot = 64, H - 64
     gap = min(28, (bot - top0) / max(len(names), 1))
     top = top0 + ((bot - top0) - (len(names) - 1) * gap) / 2
     pin = [(ix, top + i * gap) for i in range(len(names))]
@@ -61,9 +62,10 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0, fresh=False):
         pairs.append((w2[0, j] if j < w2.shape[1] else 0, a, po))
     _edges(surf, pairs)
 
-    n_new = len(pin) - new_inputs if fresh and new_inputs else len(pin)
+    first_new = len(pin) - new_inputs if new_inputs else len(pin)
     for i, p in enumerate(pin):
-        c = A if i >= n_new else config.DIM_GRAY
+        v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
+        c = A if (i >= first_new or v > 0.5) else config.DIM_GRAY
         pygame.draw.circle(surf, c, (int(p[0]), int(p[1])), 6, 2)
         lab = font(15).render(names[i], True, c)
         surf.blit(lab, lab.get_rect(right=p[0] - 12, centery=p[1]))
