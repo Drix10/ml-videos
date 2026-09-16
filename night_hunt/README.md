@@ -25,7 +25,7 @@ Portrait 540×960 window — record for Reels/Shorts with no cropping.
 ## Run
 
 ```bash
-cd shark_neuroevolution
+cd night_hunt
 pip install -r requirements.txt
 python main.py
 ```
@@ -106,7 +106,7 @@ Fitness = mean survived frames (+100 if nobody caught).
 
 | Symptom | Fix |
 |---|---|
-| `ModuleNotFoundError: config` | Run from inside `shark_neuroevolution/` |
+| `ModuleNotFoundError: config` | Run from inside `night_hunt/` |
 | Stuck on a level 30+ gens | Lower its `threshold`; check `catch_mean` is climbing |
 | `catch_mean` flat, `best` spiky | Raise `EVAL_EPISODES` (variance too high) |
 | Old checkpoint won't load | Pass the level's `input_size` to `Brain.load` |
