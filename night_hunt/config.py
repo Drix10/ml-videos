@@ -48,7 +48,7 @@ SURVIVE_BONUS = 100.0  # nobody caught before timeout
 RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
-SHOW_BEST_ONLY = True  # video mode: train headless, replay only the level-best
+FINALE_TARGET = 1800  # L6 stops here: school essentially untouchable
 
 # --- Level progression: each level grows the prey's senses. ---
 LEVELS = [
