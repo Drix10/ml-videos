@@ -15,7 +15,7 @@ Portrait 540×960 window — ready to record for Reels/Shorts with no cropping.
 - Genetic algorithm per level: elites + tournament + crossover + Gaussian mutation.
 - Live visualizer: labeled sensor nodes, weight-colored connections, glowing hot nodes.
 - Arena: angle-steered shark with trail, fleeing fish with tails, eat-burst rings.
-- HUD: `Level X / 6 · name`, `ree[g]orithm` tag, live fish countdown, caption bar.
+- HUD: two-tone `Level X / 6 · name` under the graph, pink fish countdown, caption bar.
 - Logging: per-level checkpoints + append-only fitness CSV (`level` column).
 
 ## Requirements
@@ -82,7 +82,7 @@ input count (1, 2, 4, 5, 9, 11), then step an `Arena(brain, level_idx)`.
 
 - White triangle shark (pink glow ring, fading blue trail), white fish with
   tail fins (wander + flee), pink expanding ring on each catch.
-- HUD: `ree[g]orithm` top-left, `N / 40 FISH LEFT` top-right.
+- HUD: pink `N / 32 FISH LEFT` top-right, no branding.
 - Bottom caption bar shows the level's caption; `SPACE skip replay` hint below.
 
 ## How it works

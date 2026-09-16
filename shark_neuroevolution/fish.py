@@ -18,6 +18,7 @@ class Fish:
     def __init__(self, rng, shark_xy=None):
         self.x, self.y = spawn_pos(rng, shark_xy)
         self.vx, self.vy = rng.uniform(-1.5, 1.5, 2)
+        self.angle = 0.0
         self.alive = True
 
     def update(self, rng, shark_x, shark_y):
@@ -33,6 +34,9 @@ class Fish:
         self.vx += rng.uniform(-0.2, 0.2)  # wander
         self.vy += rng.uniform(-0.2, 0.2)
         sp = (self.vx ** 2 + self.vy ** 2) ** 0.5
+        if sp > 0.3:  # heading for orienting the minnow silhouette
+            import math
+            self.angle = math.atan2(self.vy, self.vx)
         if sp > config.FISH_SPEED:  # speed cap
             self.vx, self.vy = self.vx / sp * config.FISH_SPEED, \
                 self.vy / sp * config.FISH_SPEED
