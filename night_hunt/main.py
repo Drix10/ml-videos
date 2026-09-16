@@ -20,7 +20,6 @@ S = config.UI_SCALE  # device pixels per logical unit (2 = 1080x1920)
 MAX_GENS = int(os.environ.get("MAX_GENS", "0") or 0)  # 0 = endless
 SKIP_REPLAY = bool(os.environ.get("SKIP_REPLAY", ""))  # headless monitor runs
 
-
 def prune_checkpoints():
     files = sorted(glob.glob("checkpoints/best_*.pt"), key=os.path.getmtime)
     for f in files[:-config.MAX_CHECKPOINTS]:
@@ -125,7 +124,13 @@ def main():
             arena = Arena(best, level)  # rendered replay of best school
             prev_n = len(config.LEVELS[level - 1]["inputs"]) if level > 0 else 0
             new_n = len(config.LEVELS[level]["inputs"]) - prev_n
-            for _ in range(0 if SKIP_REPLAY else config.EPISODE_LENGTH):
+            lvl = config.LEVELS[level]
+            leveling = level < len(config.LEVELS) - 1 and gen + 1 >= lvl["min_gens"] \
+                and fit.max() >= lvl["threshold"]
+            finale_show = level == len(config.LEVELS) - 1 and (gen + 1) % 10 == 0
+            show = not SKIP_REPLAY and \
+                (not config.SHOW_BEST_ONLY or leveling or finale_show)
+            for _ in range(config.EPISODE_LENGTH if show else 0):
                 skip = False
                 for e in pygame.event.get():
                     if e.type == pygame.QUIT:
@@ -144,8 +149,7 @@ def main():
             if MAX_GENS and total >= MAX_GENS:
                 print(f"[monitor] capped at {total} generations", flush=True)
                 return
-            if level < len(config.LEVELS) - 1 and gen + 1 >= lvl["min_gens"] \
-                    and fit.max() >= lvl["threshold"]:
+            if leveling:
                 level += 1  # grow brains, keep learned weights
                 print(f"*** LEVEL UP -> Level {level + 1}: "
                       f"{config.LEVELS[level]['name']} ***", flush=True)

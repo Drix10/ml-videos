@@ -47,13 +47,14 @@ SURVIVE_BONUS = 100.0  # nobody caught before timeout
 RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
+SHOW_BEST_ONLY = True  # video mode: train headless, replay only the level-best
 
 # --- Level progression: each level grows the prey's senses. ---
 LEVELS = [
     {"name": "blind",     "inputs": ["bias"],
      "caption": "no senses, no fear, so",
      "description": "Knows nothing. Drifts.",
-     "threshold": 1200, "min_gens": 10},
+     "threshold": 1100, "min_gens": 10},
     {"name": "proximity", "inputs": ["bias", "dist"],
      "caption": "feel how near it",
      "description": "Bolts when it nears — but which way?",

@@ -32,6 +32,8 @@ python main.py
 ```
 
 Watch the best school replay each generation. `SPACE` skips boring ones.
+`SHOW_BEST_ONLY` (default on) trains each level headless and replays only
+the level-winning school — one showcase replay per stage, no filler.
 Level-ups hit a gold flash with the new sense held full-screen (edit point).
 Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
 Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
