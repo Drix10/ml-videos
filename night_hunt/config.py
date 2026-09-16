@@ -23,7 +23,7 @@ TEXT_GRAY = (130, 138, 170)
 NUM_MICE = 32
 OWL_RADIUS = 16
 CATCH_RADIUS = 12
-OWL_SPEED = 3.2       # fixed threat: faster than any mouse
+OWL_SPEED = 3.0       # same pace as mice: catches need interception, not speed
 OWL_TURN = 0.045       # ...but turns wide, so early cutaways work
 MOUSE_SPEED = 3.0
 TURN_RATE = 0.06      # mouse steering agility
@@ -38,7 +38,7 @@ OUTPUT_NODES = 1  # single steering value in [-1, 1]
 POPULATION_SIZE = 50
 EVAL_EPISODES = 3  # fitness = mean over episodes: one lucky run can't spike
 MUTATION_RATE = 0.05
-MUTATION_STRENGTH = 0.1
+MUTATION_STRENGTH = 0.07  # small steps: keeps children near parents (heritable)
 ELITE_FRACTION = 0.2
 EPISODE_LENGTH = 1800  # 30s at 60fps
 
@@ -62,7 +62,7 @@ LEVELS = [
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "sense where from, and",
      "description": "Finally flees the right way.",
-     "threshold": 1400, "min_gens": 10},
+     "threshold": 1350, "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "read the lunge before",
      "description": "Cuts away early; the owl overshoots.",

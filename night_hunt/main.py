@@ -61,6 +61,46 @@ def level_up_population(pop, fitness, new_size):
             [order[i % len(order)] for i in range(len(pop))]]
 
 
+def showcase(screen, panel, game, clock):
+    """Train-headless workflow: replay each level's all-time best school once."""
+    import csv as _csv
+    best = {}  # level -> (gen, fit)
+    try:
+        with open("logs/fitness.csv") as f:
+            for row in _csv.DictReader(f):
+                lv, g, ft = int(row["level"]), int(row["generation"]), float(row["best"])
+                if lv not in best or ft > best[lv][1]:
+                    best[lv] = (g, ft)
+    except FileNotFoundError:
+        print("[showcase] no logs/fitness.csv yet — train first", flush=True)
+        return
+    for lv in sorted(best):
+        g, ft = best[lv]
+        try:
+            brain = Brain.load(f"checkpoints/best_L{lv}_gen{g}.pt",
+                               len(config.LEVELS[lv - 1]["inputs"]))
+        except FileNotFoundError:
+            print(f"[showcase] L{lv} gen {g} pruned, skipping", flush=True)
+            continue
+        print(f"[showcase] Level {lv} gen {g} (fit {ft:.0f}) — SPACE for next", flush=True)
+        arena = Arena(brain, lv - 1)
+        prev_n = len(config.LEVELS[lv - 2]["inputs"]) if lv > 1 else 0
+        new_n = len(config.LEVELS[lv - 1]["inputs"]) - prev_n
+        for _ in range(config.EPISODE_LENGTH):
+            nxt = False
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    return
+                if e.type == pygame.KEYDOWN and e.key in (pygame.K_SPACE, pygame.K_ESCAPE):
+                    nxt = True
+            if nxt or arena.step():
+                break
+            visualizer.draw_network(panel, brain, arena.obs, lv - 1, new_n)
+            visualizer.draw_arena(game, arena)
+            pygame.display.flip()
+            clock.tick(config.FPS)
+
+
 def main():
     pygame.init()
     pygame.display.set_caption("Night Hunt")
@@ -71,6 +111,10 @@ def main():
     panel = screen.subsurface((nx, ny, nw, nh))
     game = screen.subsurface((gx, gy, config.ARENA_W * S, config.ARENA_H * S))
     clock = pygame.time.Clock()
+    if os.environ.get("SHOWCASE"):  # train-headless workflow: play the 6 bests
+        showcase(screen, panel, game, clock)
+        pygame.quit()
+        return
     HEADER = ["level", "generation", "best", "mean", "worst",
               "catch_best", "catch_mean"]
     log_path = "logs/fitness.csv"
