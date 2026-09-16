@@ -31,6 +31,8 @@ python main.py
 ```
 
 Watch the best school replay each generation. `SPACE` skips boring ones.
+Level-ups hit a gold flash with the new sense held full-screen (edit point),
+plus procedurally synthesized catch/level-up blips — zero audio files.
 Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
 
 ## The 6 levels
@@ -48,12 +50,13 @@ Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
 
 - **Gold rings/labels** = this level's new senses (older ones glow gold only
   while firing). Gray = quiet. Thick gold lines = strong connections.
-- **Counter** top-right = mice still alive. **Caption** = the current lesson.
+- **Counter** top-right = mice still alive. New senses slide into the graph;
+  catches burst gold particles; the arena wears a soft vignette.
 
 ## Files
 
 `config.py` (all settings) · `model.py` (brain) · `mice.py` (prey) ·
-`owl.py` (fixed hunter) · `environment.py` (episodes) ·
+`owl.py` (fixed hunter) · `environment.py` (episodes) · `audio.py` (synth blips) ·
 `evolution.py` (breeding) · `visualizer.py` (drawing) · `main.py` (run it)
 
 ## If it gets stuck
