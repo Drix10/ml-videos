@@ -15,8 +15,7 @@ def _episode_step(shark, fish, rng, level_idx):
         f.update(rng, shark.x, shark.y)
     n = 0
     for f in fish:
-        if f.alive and math.hypot(shark.x - f.x, shark.y - f.y) \
-                < config.SHARK_RADIUS + config.FISH_RADIUS:
+        if f.alive and math.hypot(shark.x - f.x, shark.y - f.y) < config.CATCH_RADIUS:
             f.alive = False
             n += 1
             shark.fitness += config.EAT_REWARD

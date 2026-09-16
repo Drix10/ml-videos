@@ -19,11 +19,12 @@ TEXT_WHITE = (240, 240, 240)
 TEXT_GRAY = (120, 120, 120)
 
 # Game
-NUM_FISH = 48
+NUM_FISH = 32
 SHARK_RADIUS = 15
 FISH_RADIUS = 5
+CATCH_RADIUS = 15  # edible distance; shrink to punish accidental bumps
 SHARK_SPEED = 3.5     # faster than fish: hunts must chase, not just bump
-FISH_SPEED = 2.5
+FISH_SPEED = 2.8
 TURN_RATE = 0.05        # slow deliberate turns (was 0.15 spin)
 FLEE_RADIUS = 200       # fish sense danger further out
 FLEE_STRENGTH = 4.0
@@ -54,11 +55,11 @@ LEVELS = [
     {"name": "blind",     "inputs": ["bias"],
      "caption": "senses, no training, so",
      "description": "Only knows it exists. Flails randomly.",
-     "threshold": 100, "min_gens": 10},
+     "threshold": 150, "min_gens": 10},
     {"name": "proximity", "inputs": ["bias", "dist"],
      "caption": "Give every fish one",
      "description": "Knows how far the nearest fish is.",
-     "threshold": 150, "min_gens": 10},
+     "threshold": 200, "min_gens": 10},
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "coming from, and they",
      "description": "Knows the exact direction to the nearest fish.",
@@ -66,12 +67,12 @@ LEVELS = [
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "Feed it the predator's",
      "description": "Knows if it is closing in or drifting away.",
-     "threshold": 340, "min_gens": 10},
+     "threshold": 330, "min_gens": 10},
     {"name": "walls",     "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
      "caption": "Add wall sensors so",
      "description": "Knows where the walls are to avoid crashing.",
-     "threshold": 400, "min_gens": 10},
+     "threshold": 380, "min_gens": 10},
     {"name": "full sense", "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                       "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190",
                                       "aim x", "aim y"],

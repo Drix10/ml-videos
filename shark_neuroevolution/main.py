@@ -16,6 +16,8 @@ from model import Brain
 
 os.makedirs("checkpoints", exist_ok=True)
 os.makedirs("logs", exist_ok=True)
+MAX_GENS = int(os.environ.get("MAX_GENS", "0") or 0)  # 0 = endless
+SKIP_REPLAY = bool(os.environ.get("SKIP_REPLAY", ""))  # headless monitor runs
 
 
 def prune_checkpoints():
@@ -61,7 +63,7 @@ def main():
     if fresh:
         wr.writerow(["level", "generation", "best", "mean", "worst"])
 
-    level, gen = 0, 0
+    level, gen, total = 0, 0, 0
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
     try:
         while True:
@@ -91,7 +93,7 @@ def main():
             fresh = gen < 3  # highlight brand-new senses for first 3 replays
             prev_n = len(config.LEVELS[level - 1]["inputs"]) if level > 0 else 0
             new_n = len(config.LEVELS[level]["inputs"]) - prev_n
-            for _ in range(config.EPISODE_LENGTH):
+            for _ in range(0 if SKIP_REPLAY else config.EPISODE_LENGTH):
                 skip = False
                 for e in pygame.event.get():
                     if e.type == pygame.QUIT:
@@ -117,6 +119,10 @@ def main():
                 continue
             pop = next_generation(pop, fit)
             gen += 1
+            total += 1
+            if MAX_GENS and total >= MAX_GENS:
+                print(f"[monitor] capped at {total} generations", flush=True)
+                return
     finally:
         log.close()
         pygame.quit()

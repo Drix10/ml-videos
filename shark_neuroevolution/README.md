@@ -61,12 +61,12 @@ input count (1, 2, 4, 5, 9, 11), then step an `Arena(brain, level_idx)`.
 
 | Level | Name | Senses | To pass |
 |---|---|---|---|
-| 1 | blind | `bias` | 100 (~10 fish) | luck + circling |
-| 2 | proximity | + `dist` | 150 | must beat blind luck (122) |
-| 3 | direction | + `dir x`, `dir y` | 280 | randoms already hit 222 — must truly aim |
-| 4 | intent | + `closing` | 340 | chase, don't bump |
-| 5 | walls | + 4 wall sensors | 400 (~40 fish) | near-perfect runs |
-| 6 | full sense | + `aim x`, `aim y` | finale, evolves forever | perfect-aimer ceiling: 566 |
+| 1 | blind | `bias` | 150 | above blind-luck ceiling (~112) |
+| 2 | proximity | + `dist` | 200 | must beat evolved blind |
+| 3 | direction | + `dir x`, `dir y` | 280 | randoms can't fake aiming anymore |
+| 4 | intent | + `closing` | 330 | chase, don't bump |
+| 5 | walls | + 4 wall sensors | 380 (~37 fish) | near-perfect runs |
+| 6 | full sense | + `aim x`, `aim y` | finale, evolves forever | perfect-aimer ceiling: 409 |
 
 ## What you see
 
