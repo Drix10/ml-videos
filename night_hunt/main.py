@@ -118,6 +118,10 @@ def main():
                   f"mean {fit.mean():.1f} (lost {ate.mean():.1f}) "
                   f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
                   flush=True)
+            if gen + 1 >= 25 and fit.max() < config.LEVELS[level]["threshold"]:
+                print(f"[stuck] {gen + 1} gens without passing — "
+                      f"lower threshold {config.LEVELS[level]['threshold']:.0f} "
+                      f"in config.py if this persists", flush=True)
             pygame.display.set_caption(
                 f"Night Hunt — L{level + 1} gen {gen} best {fit.max():.0f}")
 
