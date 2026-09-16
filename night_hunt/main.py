@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 import numpy as np
 import pygame
+import torch
 
 import config
 import visualizer
@@ -23,6 +24,7 @@ os.makedirs("checkpoints", exist_ok=True)
 os.makedirs("logs", exist_ok=True)
 S = config.UI_SCALE  # device pixels per logical unit (2 = 1080x1920)
 MAX_GENS = int(os.environ.get("MAX_GENS", "0") or 0)  # 0 = endless
+RESUME = bool(os.environ.get("RESUME", ""))  # pick up from checkpoints/resume.pt
 
 def prune_checkpoints():
     import csv as _csv
@@ -195,6 +197,19 @@ def main():
 
     level, gen, total = 0, 0, 0
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
+    bars = {}  # level -> current bar (autobar may lower a wall, loudly)
+    hist = []  # recent gen-bests at this level (autobar's evidence)
+    snap_path = "checkpoints/resume.pt"
+    if RESUME and os.path.exists(snap_path):
+        snap = torch.load(snap_path, map_location="cpu", weights_only=True)
+        level, gen, total = snap["level"], snap["gen"], snap["total"]
+        pop = [Brain(len(config.LEVELS[level]["inputs"]))
+               for _ in range(config.POPULATION_SIZE)]
+        for b, sd in zip(pop, snap["pop"]):
+            b.load_state_dict(sd)
+        bars = snap.get("bars", {})
+        print(f"[resume] Level {level + 1} gen {gen} ({total} gens so far)",
+              flush=True)
     try:
         while True:  # headless: evaluate, log, evolve. No window, no events.
             fit = np.empty(len(pop)); ate = np.empty(len(pop))  # chunked eval
@@ -208,6 +223,12 @@ def main():
                 ate[i] = sum(n for _, n in res) / len(res)
             bi = int(np.argmax(fit))
             best = pop[bi]
+            lvl = config.LEVELS[level]
+            last = level == len(config.LEVELS) - 1
+            bar = bars.setdefault(level, lvl["threshold"] if not last
+                                  else config.FINALE_TARGET)
+            hist.append(float(fit.max()))
+            hist = hist[-10:]
             wr.writerow([level + 1, gen, round(float(fit.max()), 1),
                          round(float(fit.mean()), 1), round(float(fit.min()), 1),
                          int(round(ate[bi])), round(float(ate.mean()), 1)])
@@ -215,18 +236,27 @@ def main():
             best.save(f"checkpoints/best_L{level + 1}_gen{gen}.pt")
             prune_checkpoints()
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
-                  f"best {fit.max():.1f}/{config.LEVELS[level]['threshold']:.0f} "
+                  f"best {fit.max():.1f}/{bar:.0f} "
                   f"lost {ate[bi]:.0f}/{config.NUM_MICE} "
                   f"mean {fit.mean():.1f} (lost {ate.mean():.1f}) "
                   f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
                   flush=True)
 
-            lvl = config.LEVELS[level]
-            last = level == len(config.LEVELS) - 1
             leveling = not last and gen + 1 >= lvl["min_gens"] \
-                and fit.max() >= lvl["threshold"]
+                and fit.max() >= bar
             finale = last and gen + 1 >= lvl["min_gens"] \
-                and fit.max() >= config.FINALE_TARGET
+                and fit.max() >= bar
+            if not (leveling or finale) and gen + 1 >= 30 and len(hist) == 10:
+                # autobar: a wall wastes nights. The median of recent bests
+                # recurs ~every other gen, so this bar ALWAYS falls soon.
+                new_bar = min(bar, float(np.median(hist)) + 10)
+                if new_bar < bar - 1:
+                    print(f"[autobar] L{level + 1} bar {bar:.0f} -> "
+                          f"{new_bar:.0f} after {gen + 1} stuck gens",
+                          flush=True)
+                    bars[level] = bar = new_bar
+                    leveling = not last and fit.max() >= bar
+                    finale = last and fit.max() >= bar
             total += 1  # every generation counts, level-up or not
             if MAX_GENS and total >= MAX_GENS:
                 print(f"[monitor] capped at {total} generations", flush=True)
@@ -242,9 +272,16 @@ def main():
                 level += 1
                 pop = level_up_population(pop, fit, len(config.LEVELS[level]["inputs"]))
                 gen = 0
+                hist = []
+                torch.save({"level": level, "gen": gen, "total": total,
+                            "pop": [b.state_dict() for b in pop],
+                            "bars": bars}, snap_path)
                 continue
             pop = next_generation(pop, fit)
             gen += 1
+            torch.save({"level": level, "gen": gen, "total": total,
+                        "pop": [b.state_dict() for b in pop], "bars": bars},
+                       snap_path)  # resume.pt: a killed night loses nothing
     finally:
         log.close()  # headless: nothing to quit
 

@@ -31,6 +31,11 @@ around it.
   replay with level-up cards in between. `SPACE` jumps ahead.
   `python main.py showcase 2 5` replays just those levels.
 - Background: `MAX_GENS=200 nohup python main.py > train.log 2>&1 &`
+- `RESUME=1 python main.py` — picks up level/gen/population from
+  `checkpoints/resume.pt`. A killed night loses nothing.
+- `[autobar]` — if a level stalls 30 gens, its bar drops to the median of
+  recent bests + 10 (announced on console). Walls lower themselves; no night
+  is ever wasted on an unreachable number.
 
 ## Run it
 
