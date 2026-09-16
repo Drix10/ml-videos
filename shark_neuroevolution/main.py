@@ -102,7 +102,7 @@ def main():
                         skip = True
                 if skip or arena.step():
                     break
-                visualizer.draw_network(panel, best, arena.obs, level, new_n, fresh)
+                visualizer.draw_network(panel, best, arena.obs, level, arena.out, new_n, fresh)
                 visualizer.draw_arena(game, arena)
                 visualizer.draw_caption(screen, config.LEVELS[level]["caption"])
                 pygame.display.flip()

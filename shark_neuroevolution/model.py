@@ -21,8 +21,9 @@ class Brain(nn.Module):
             out = self(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
         return out.numpy()
 
-    def get_weights(self):  # w1: [hid, in], w2: [out, hid], for visualizer
+    def get_weights(self):  # for visualizer: w1 [hid, in], b1, w2 [out, hid]
         return {"w1": self.fc1.weight.detach().cpu().numpy(),
+                "b1": self.fc1.bias.detach().cpu().numpy(),
                 "w2": self.fc2.weight.detach().cpu().numpy()}
 
     def mutate(self, rate=config.MUTATION_RATE, strength=config.MUTATION_STRENGTH):
