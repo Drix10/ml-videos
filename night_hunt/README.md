@@ -55,7 +55,7 @@ Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
 | 2 · proximity | how close the owl is | 1150 |
 | 3 · direction | where it's coming from | 1230 |
 | 4 · intent | is it closing in | 1300 |
-| 5 · walls | where the edges are | 1650 |
+| 5 · walls | where the edges are | 1550 |
 | 6 · full sense | exact owl position | evolves forever |
 
 ## Reading the screen

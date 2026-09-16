@@ -72,7 +72,7 @@ LEVELS = [
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
      "caption": "learn the edges so",
      "description": "Stops cornering itself.",
-     "threshold": 1650, "min_gens": 10},
+     "threshold": 1550, "min_gens": 10},
     {"name": "full sense", "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                       "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190",
                                       "aim x", "aim y"],
