@@ -26,12 +26,21 @@ class Spark:  # catch-burst mote: flies out, fades fast
         self.life -= 0.06
 
 
-def _episode_step(brain, owl, mice, level_idx):
-    """Shared physics: owl hunts, live mice steer via ONE batched forward pass."""
+def _episode_step(brain, owl, mice, level_idx, obs_buf=None):
+    """Shared physics: owl hunts, live mice steer via ONE batched forward pass.
+    obs_buf: optional pre-allocated (n_mice, n_inputs) scratch array. When
+    given, per-mouse observations are written into its rows in place instead
+    of each mouse allocating (and get_inputs building) a fresh small array
+    every step, which profiling showed was a bigger cost than the net itself."""
     owl.update(mice)
     alive = [m for m in mice if m.alive]
     if alive:
-        obs = np.stack([m.get_inputs(owl, level_idx) for m in alive])
+        if obs_buf is not None:
+            obs = obs_buf[:len(alive)]
+            for i, m in enumerate(alive):
+                m.get_inputs(owl, level_idx, out=obs[i])
+        else:
+            obs = np.stack([m.get_inputs(owl, level_idx) for m in alive])
         turns = brain.act_batch(obs)
         for m, t in zip(alive, turns):
             m.update(float(t))
@@ -56,9 +65,11 @@ def simulate(brain, level_idx, rng=None, steps=config.EPISODE_LENGTH,
     rng = rng or np.random.default_rng()
     owl = Owl()
     mice = [Mouse(rng, (owl.x, owl.y)) for _ in range(n_mice)]
+    n_in = len(config.LEVELS[level_idx]["inputs"])
+    obs_buf = np.empty((n_mice, n_in), dtype=np.float32)  # reused every step
     caught = 0
     for _ in range(steps):
-        caught += _episode_step(brain, owl, mice, level_idx)
+        caught += _episode_step(brain, owl, mice, level_idx, obs_buf)
         if caught >= n_mice:
             break
     return _fitness(mice, caught), caught
@@ -74,20 +85,29 @@ class Arena:  # live, renderable episode of one school (showcase replays)
                      for _ in range(config.NUM_MICE)]
         n_in = len(config.LEVELS[level_idx]["inputs"])
         self.obs = np.zeros(n_in, dtype=np.float32)
+        self.obs_buf = np.empty((len(self.mice), n_in), dtype=np.float32)
         self.caught = 0
         self.flash = 0  # catch-burst ring timer
         self.sparks = []  # live particles
+        self._last_focus = self.mice[0] if self.mice else None
 
-    def _focus(self):  # camera mouse: first survivor (diagram shows its brain state)
+    def _focus(self):
+        """Camera mouse for the brain panel: first living survivor. If the
+        whole school just got wiped, keep showing the last mouse that WAS
+        alive (frozen at its final inputs) instead of jump-cutting to
+        mice[0], which may be an arbitrary, unrelated mouse."""
         for m in self.mice:
             if m.alive:
+                self._last_focus = m
                 return m
-        return self.mice[0]
+        return self._last_focus
 
     def step(self):
         f = self._focus()
-        self.obs = f.get_inputs(self.owl, self.level_idx)
-        n = _episode_step(self.brain, self.owl, self.mice, self.level_idx)
+        if f is not None:
+            self.obs = f.get_inputs(self.owl, self.level_idx)
+        n = _episode_step(self.brain, self.owl, self.mice, self.level_idx,
+                          self.obs_buf)
         if n:
             self.caught += n
             self.flash = 20

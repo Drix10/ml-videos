@@ -24,26 +24,48 @@ class Mouse:
         self.survived = 0  # frames lived: the fitness that matters
         self.trail = []  # short motion ribbon (visual only)
 
-    def get_inputs(self, owl, level_idx) -> np.ndarray:
+    def get_inputs(self, owl, level_idx, out: np.ndarray = None) -> np.ndarray:
+        """Perf: only compute the features this level actually uses (profiling
+        showed the old build-a-dict-of-11-then-filter approach cost MORE per
+        step than the neural net forward pass itself). `out`, if given, is a
+        pre-allocated row (e.g. a view into a shared (n_mice, n_in) buffer)
+        that this method fills in place instead of allocating a fresh array —
+        lets the caller avoid one allocation per mouse per step.
+        Bit-identical to the old dict-based version for every level (verified
+        by fuzz test against the original implementation)."""
         names = config.LEVELS[level_idx]["inputs"]
+        if out is None:
+            out = np.empty(len(names), dtype=np.float32)
         W, H = config.ARENA_W, config.ARENA_H
-        dx, dy = owl.x - self.x, owl.y - self.y
+        dx = owl.x - self.x
+        dy = owl.y - self.y
         nd = math.hypot(dx, dy)
-        full = {
-            "bias": 1.0,
-            "dist": nd / max(W, H),
-            "dir x": dx / max(nd, 1.0),
-            "dir y": dy / max(nd, 1.0),
-            "closing": (math.cos(self.angle) * dx + math.sin(self.angle) * dy)
-                       / max(nd, 1.0),
-            "wall \u2191": self.y / H,
-            "wall \u2193": (H - self.y) / H,
-            "wall \u2192": (W - self.x) / W,
-            "wall \u2190": self.x / W,
-            "aim x": owl.x / W - 0.5,
-            "aim y": owl.y / H - 0.5,
-        }
-        return np.array([full[n] for n in names], dtype=np.float32)
+        nd_safe = max(nd, 1.0)
+        for i, n in enumerate(names):
+            if n == "bias":
+                out[i] = 1.0
+            elif n == "dist":
+                out[i] = nd / max(W, H)
+            elif n == "dir x":
+                out[i] = dx / nd_safe
+            elif n == "dir y":
+                out[i] = dy / nd_safe
+            elif n == "closing":
+                out[i] = (math.cos(self.angle) * dx
+                          + math.sin(self.angle) * dy) / nd_safe
+            elif n == "wall \u2191":
+                out[i] = self.y / H
+            elif n == "wall \u2193":
+                out[i] = (H - self.y) / H
+            elif n == "wall \u2192":
+                out[i] = (W - self.x) / W
+            elif n == "wall \u2190":
+                out[i] = self.x / W
+            elif n == "aim x":
+                out[i] = owl.x / W - 0.5
+            elif n == "aim y":
+                out[i] = owl.y / H - 0.5
+        return out
 
     def update(self, turn: float):
         self.angle = (self.angle + turn * config.TURN_RATE) % (2 * math.pi)

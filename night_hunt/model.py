@@ -21,13 +21,17 @@ class Brain(nn.Module):
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         with torch.no_grad():  # asarray avoids a copy when obs is already float32
-            out = self(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
+            # .forward() directly, not self(x): skips nn.Module's hook-dispatch
+            # wrapper (_call_impl/_wrapped_call_impl), which profiling showed
+            # costs as much as the actual matmul for a model this tiny. Safe
+            # here since this Brain never registers forward/backward hooks.
+            out = self.forward(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
         return out.numpy()
 
     def act_batch(self, obs: np.ndarray) -> np.ndarray:
         """Whole school through one forward pass (32x cheaper than per-mouse)."""
         with torch.no_grad():
-            out = self(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
+            out = self.forward(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
         return out.numpy().ravel()
 
     def get_weights(self):  # for visualizer: w1 [hid, in], b1, w2 [out, hid]

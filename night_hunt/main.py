@@ -31,6 +31,22 @@ S = config.UI_SCALE  # device pixels per logical unit (2 = 1080x1920)
 MAX_GENS = int(os.environ.get("MAX_GENS", "0") or 0)  # 0 = endless
 RESUME = bool(os.environ.get("RESUME", ""))  # pick up from checkpoints/resume.pt
 
+# Every step is ONE tiny forward pass (<=11 in, 9 hidden, 1 out). On a
+# multi-core box PyTorch's default intra-op thread pool spends more time
+# synchronizing threads than doing the actual matmul at this size — a single
+# generation was measurably slower with the default thread count than with
+# threads=1 in profiling. Pin to 1 thread; parallelism should come from
+# running more episodes, not from parallelizing one episode's tiny math.
+torch.set_num_threads(1)
+
+SEED = os.environ.get("SEED")  # optional: set for a fully reproducible run
+if SEED is not None:
+    import random
+    random.seed(int(SEED))
+    np.random.seed(int(SEED))  # also seeds evolution.py's tournament draws
+    torch.manual_seed(int(SEED))  # also seeds crossover/mutate's draws
+    print(f"[seed] fixed at {SEED} — run is fully reproducible", flush=True)
+
 def prune_checkpoints():
     import csv as _csv
     keep = set()  # each level's all-time best must survive for showcase
@@ -187,14 +203,21 @@ def main():
     log_path = f"{LOGD}/fitness.csv"
     if os.path.exists(log_path) and os.path.getsize(log_path):
         with open(log_path) as f:  # schema changed? archive, start clean
-            if f.readline().strip() != ",".join(HEADER):
-                try:
-                    os.rename(log_path,
-                              f"{LOGD}/fitness_legacy_{int(__import__('time').time())}.csv")
-                except PermissionError:  # live run holds it: use session file
-                    stamp = int(__import__('time').time())
-                    log_path = f"{LOGD}/fitness_run_{stamp}.csv"
-                    print(f"[log] fitness.csv locked, writing {log_path}", flush=True)
+            header_ok = f.readline().strip() == ",".join(HEADER)
+        # rename AFTER the read handle above is closed: on Windows, renaming
+        # a file while still holding it open (even just for reading) can
+        # raise PermissionError all on its own, with no other process
+        # involved — that used to make a single, ordinary run mistake itself
+        # for a locked-by-another-instance conflict every time the schema
+        # changed.
+        if not header_ok:
+            try:
+                os.rename(log_path,
+                          f"{LOGD}/fitness_legacy_{int(__import__('time').time())}.csv")
+            except PermissionError:  # NOW genuinely means another process
+                stamp = int(__import__('time').time())          # holds it
+                log_path = f"{LOGD}/fitness_run_{stamp}.csv"
+                print(f"[log] fitness.csv locked, writing {log_path}", flush=True)
     fresh = not os.path.exists(log_path) or os.path.getsize(log_path) == 0
     log = open(log_path, "a", newline="")  # append: "w" wiped history
     wr = csv.writer(log)
@@ -219,14 +242,35 @@ def main():
             bars = snap.get("bars", {})
             print(f"[resume] Level {level + 1} gen {gen} "
                   f"({total} gens so far)", flush=True)
+    elif RESUME:
+        print(f"[resume] no checkpoint at {snap_path}, starting fresh",
+              flush=True)
+    def save_snapshot():
+        # Always called before every `return` in the loop below, so a killed
+        # (or MAX_GENS-capped) night really does lose nothing — see the
+        # MAX_GENS fix note further down for why this used to be false.
+        torch.save({"level": level, "gen": gen, "total": total,
+                    "pop": [b.state_dict() for b in pop], "bars": bars},
+                   snap_path)
+
     try:
         while True:  # headless: evaluate, log, evolve. No window, no events.
             fit = np.empty(len(pop)); ate = np.empty(len(pop))  # chunked eval
             for i, b in enumerate(pop):  # averaged: a luck spike can't dominate
-                # common spawns: same layouts for every brain, so score gaps
-                # come from policy, not spawn luck (this makes fitness heritable)
+                # Fixed per level (NOT per generation): every generation at
+                # this level is scored on the exact same EVAL_EPISODES
+                # layouts. Seeding by (level, gen, ep) instead — as this used
+                # to do — meant an unchanged elite got re-scored on a fresh
+                # random layout every generation, so fit.max() could swing
+                # from pure spawn luck even with zero learning. That broke
+                # three things at once: elitism no longer guaranteed
+                # non-decreasing best fitness within a level, the "best"
+                # checkpoint later loaded by showcase could just be the
+                # luckiest seed rather than the best brain, and autobar's
+                # stagnation read (median of recent bests) was measuring
+                # seed noise as much as genuine plateauing.
                 res = [simulate(b, level,
-                                rng=np.random.default_rng((level, gen, ep)))
+                                rng=np.random.default_rng((level, ep)))
                        for ep in range(config.EVAL_EPISODES)]
                 fit[i] = sum(f for f, _ in res) / len(res)
                 ate[i] = sum(n for _, n in res) / len(res)
@@ -264,17 +308,28 @@ def main():
                           f"{new_bar:.0f} after {gen + 1} stuck gens",
                           flush=True)
                     bars[level] = bar = new_bar
-                    leveling = not last and fit.max() >= bar
-                    finale = last and fit.max() >= bar
+                    # Re-derive with the SAME gate as above (min_gens included).
+                    # Right now every level's min_gens (<=10) is well under
+                    # the 30-gen floor that unlocks autobar, so dropping the
+                    # check here was harmless in practice — but silently
+                    # relying on that made it a landmine for the next config
+                    # edit. Keep the gate explicit.
+                    leveling = not last and gen + 1 >= lvl["min_gens"] \
+                        and fit.max() >= bar
+                    finale = last and gen + 1 >= lvl["min_gens"] \
+                        and fit.max() >= bar
             total += 1  # every generation counts, level-up or not
-            if MAX_GENS and total >= MAX_GENS:
-                print(f"[monitor] capped at {total} generations", flush=True)
-                return
-            if finale:
-                print(f"*** FINALE CLEARED ({fit.max():.0f} >= "
-                      f"{bar:.0f}) — run `python main.py showcase` "
-                      f"to record the video ***", flush=True)
-                return
+
+            # NOTE on ordering, all three branches below: MAX_GENS/finale
+            # used to be checked (and `return` immediately) BEFORE ever
+            # reaching the snapshot save that used to sit at the bottom of
+            # the loop, so stopping a run via MAX_GENS silently discarded
+            # the very generation that had just been evaluated — resume.pt
+            # still pointed at the previous generation. Every "train N gens
+            # tonight" session was quietly losing its last generation of
+            # progress. Saving a snapshot before every return fixes it;
+            # worst case now is re-evaluating one already-known generation
+            # on the next resume, not losing one.
             if leveling:  # grow brains, keep learned weights
                 print(f"*** LEVEL UP -> Level {level + 2}: "
                       f"{config.LEVELS[level + 1]['name']} ***", flush=True)
@@ -282,15 +337,30 @@ def main():
                 pop = level_up_population(pop, fit, len(config.LEVELS[level]["inputs"]))
                 gen = 0
                 hist = []
-                torch.save({"level": level, "gen": gen, "total": total,
-                            "pop": [b.state_dict() for b in pop],
-                            "bars": bars}, snap_path)
+                save_snapshot()
+                if MAX_GENS and total >= MAX_GENS:
+                    print(f"[monitor] capped at {total} generations", flush=True)
+                    return
                 continue
+
+            if finale:
+                # Save the CURRENT (not re-evolved) population: there's
+                # nothing to gain from spending a generation's worth of
+                # crossover/mutate on a population we're about to discard.
+                # A later `RESUME` picks up here and can keep polishing
+                # the finale level if you want to push fit.max() higher.
+                save_snapshot()
+                print(f"*** FINALE CLEARED ({fit.max():.0f} >= "
+                      f"{bar:.0f}) — run `python main.py showcase` "
+                      f"to record the video ***", flush=True)
+                return
+
             pop = next_generation(pop, fit)
             gen += 1
-            torch.save({"level": level, "gen": gen, "total": total,
-                        "pop": [b.state_dict() for b in pop], "bars": bars},
-                       snap_path)  # resume.pt: a killed night loses nothing
+            save_snapshot()  # resume.pt: a killed (or capped) night loses nothing
+            if MAX_GENS and total >= MAX_GENS:
+                print(f"[monitor] capped at {total} generations", flush=True)
+                return
     finally:
         log.close()  # headless: nothing to quit
 

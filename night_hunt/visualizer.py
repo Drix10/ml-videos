@@ -20,8 +20,14 @@ def font(size, bold=False, mono=False):
     size = int(size * S)  # logical pt -> device px
     key = (size, bold, mono)  # SysFont does disk lookup: never build per-frame
     if key not in _fonts:
-        _fonts[key] = pygame.font.SysFont(
-            _MONO[0] if mono else _DISPLAY[0], size, bold=bold)
+        # SysFont accepts a comma-separated name list and picks the first
+        # available one — passing only [0] (as this did before) meant the
+        # declared "arial"/"courier new" fallbacks were dead code: on any
+        # box without Segoe UI/Consolas installed (non-Windows, or a
+        # stripped-down Windows image), pygame would silently drop to its
+        # own generic default font instead of the intended fallback face.
+        names = ",".join(_MONO if mono else _DISPLAY)
+        _fonts[key] = pygame.font.SysFont(names, size, bold=bold)
     return _fonts[key]
 
 
