@@ -8,28 +8,61 @@ import config
 A = config.ACCENT  # shorthand: learned / strong / new
 HAIR = (28, 34, 58)  # background edges: visible, never competing
 
-_fonts = {}  # SysFont does disk lookup: never build per-frame
+_DISPLAY = ("segoe ui", "arial")  # premium system faces: zero downloads
+_MONO = ("consolas", "courier new")
+_fonts = {}
 
 
-def font(size, bold=False):
-    if (size, bold) not in _fonts:
-        _fonts[(size, bold)] = pygame.font.SysFont("arial", size, bold=bold)
-    return _fonts[(size, bold)]
+def font(size, bold=False, mono=False):
+    key = (size, bold, mono)  # SysFont does disk lookup: never build per-frame
+    if key not in _fonts:
+        _fonts[key] = pygame.font.SysFont(
+            _MONO[0] if mono else _DISPLAY[0], size, bold=bold)
+    return _fonts[key]
+
+
+_vig = {}  # vignettes, pre-rendered once per size
+
+
+def _vignette(w, h):
+    if (w, h) not in _vig:
+        v = pygame.Surface((w, h), pygame.SRCALPHA)
+        cx, cy, maxr = w / 2, h / 2, math.hypot(w / 2, h / 2)
+        for r in range(int(maxr), 0, -4):
+            pygame.draw.circle(v, (0, 0, 0, int(70 * (1 - r / maxr) ** 2)),
+                               (int(cx), int(cy)), r)
+        _vig[(w, h)] = v
+    return _vig[(w, h)]
+
+
+_glow = {}  # one reusable glow layer per surface size
 
 
 def _edges(surf, pairs):
-    """pairs: (weight, a, b). Weak first so gold highways sit on top."""
+    """Weak first so gold highways sit on top; strong lines get a glow halo."""
+    W, H = surf.get_size()
+    g = _glow.get((W, H))
+    if g is None:
+        g = pygame.Surface((W, H), pygame.SRCALPHA)
+        _glow[(W, H)] = g
+    g.fill((0, 0, 0, 0))
     for wgt, a, b in sorted(pairs, key=lambda e: abs(float(e[0]))):
         m = min(1.0, abs(float(wgt)) * 3)
         if m < 0.12:
             pygame.draw.line(surf, HAIR, a, b, 1)
-        else:
-            color = tuple(int(config.DIM_GRAY[i] + (A[i] - config.DIM_GRAY[i]) * m)
-                          for i in range(3))
-            t = 1 + int(m * 3)
-            if m > 0.55:  # highways get a halo pass
-                pygame.draw.line(surf, color, a, b, t + 2)
-            pygame.draw.line(surf, color, a, b, t)
+            continue
+        color = tuple(int(config.DIM_GRAY[i] + (A[i] - config.DIM_GRAY[i]) * m)
+                      for i in range(3))
+        t = 1 + int(m * 3)
+        if m > 0.45:  # whisper of halo on true highways only
+            al = int(45 * m)
+            pygame.draw.line(g, (*color, al // 2), a, b, t + 4)
+            pygame.draw.line(g, (*color, al), a, b, t + 2)
+        pygame.draw.line(surf, color, a, b, t)  # core pass
+    surf.blit(g, (0, 0))
+
+
+_seen = {}  # level_idx -> tick of first draw (slide-in animation)
 
 
 def draw_network(surf, brain, obs, level_idx, new_inputs=0):
@@ -48,6 +81,15 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     gap = min(28, (bot - top0) / max(len(names), 1))
     top = top0 + ((bot - top0) - (len(names) - 1) * gap) / 2
     pin = [(ix, top + i * gap) for i in range(len(names))]
+    if new_inputs:  # new senses slide in from the left once per level
+        now0 = pygame.time.get_ticks()
+        if level_idx not in _seen:
+            _seen[level_idx] = now0
+        p_ = min(1.0, (now0 - _seen[level_idx]) / 450.0)
+        ease = 1 - (1 - p_) ** 3
+        first = len(pin) - new_inputs
+        pin = [((70 + (ix - 70) * ease) if i >= first else x, y)
+               for i, (x, y) in enumerate(pin)]
     mid = top + (len(names) - 1) * gap / 2
     hgap = min(28, (bot - top0) / n_hid)
     ph = [(hx, mid + (i - (n_hid - 1) / 2) * hgap) for i in range(n_hid)]
@@ -63,10 +105,13 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     _edges(surf, pairs)
 
     first_new = len(pin) - new_inputs if new_inputs else len(pin)
+    now = pygame.time.get_ticks()
     for i, p in enumerate(pin):
         v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
-        c = A if (i >= first_new or v > 0.5) else config.DIM_GRAY
-        pygame.draw.circle(surf, c, (int(p[0]), int(p[1])), 6, 2)
+        live = i >= first_new or v > 0.5
+        c = A if live else config.DIM_GRAY
+        r = 6 + (int(1.5 * math.sin(now * 0.006 + i * 0.8)) if live else 0)
+        pygame.draw.circle(surf, c, (int(p[0]), int(p[1])), r, 2)
         lab = font(15).render(names[i], True, c)
         surf.blit(lab, lab.get_rect(right=p[0] - 12, centery=p[1]))
     for p in ph:
@@ -91,6 +136,12 @@ def draw_arena(surf, arena):
         for i, (a, b) in enumerate(zip(pts[:-1], pts[1:])):
             al = i / max(len(pts) - 1, 1)
             pygame.draw.line(surf, (30, 34 + int(50 * al), 70 + int(50 * al)), a, b, 3)
+    for m in arena.mice:
+        if len(m.trail) > 1 and m.alive:  # faint motion ribbons
+            pts = m.trail
+            for i, (a, b) in enumerate(zip(pts[:-1], pts[1:])):
+                if i / max(len(pts) - 1, 1) > 0.4:
+                    pygame.draw.line(surf, (56, 66, 104), a, b, 2)
     for m in arena.mice:  # mice: body + ears + tail, oriented to heading
         if not m.alive:
             continue
@@ -105,6 +156,12 @@ def draw_arena(surf, arena):
     if arena.flash:  # catch burst: expanding gold ring
         pygame.draw.circle(surf, A, (int(o.x), int(o.y)),
                            config.OWL_RADIUS + (20 - arena.flash) * 2, 2)
+    for s in arena.sparks:  # burst motes
+        r = max(1, int(3 * s.life))
+        mote = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(mote, (*A, int(255 * s.life)), (r, r), r)
+        surf.blit(mote, (s.x - r, s.y - r))
+    surf.blit(_vignette(config.ARENA_W, config.ARENA_H), (0, 0))
     ca, sa = math.cos(o.angle), math.sin(o.angle)  # owl silhouette
     rot = lambda px, py: (o.x + px * ca - py * sa, o.y + px * sa + py * ca)
     pygame.draw.polygon(surf, config.OWL_COLOR,  # wings (tucked, not star-like)
@@ -122,18 +179,9 @@ def draw_arena(surf, arena):
                        (int(rot(10, -4)[0]), int(rot(10, -4)[1])), 3)
     pygame.draw.circle(surf, A, (int(o.x), int(o.y)), 28, 1)  # presence ring
     left = sum(m.alive for m in arena.mice)  # counter on quiet backing
-    n = font(22, True).render(f"{left} / {config.NUM_MICE}", True, A)
+    n = font(22, True, mono=True).render(f"{left} / {config.NUM_MICE}", True, A)
     nr = n.get_rect(topright=(config.ARENA_W - 12, 8))
     pygame.draw.rect(surf, config.ARENA_COLOR, nr.inflate(12, 6), border_radius=4)
     surf.blit(n, nr)
     t = font(13).render("MICE LEFT", True, config.TEXT_GRAY)
     surf.blit(t, t.get_rect(topright=(config.ARENA_W - 12, 40)))
-
-
-def draw_caption(surf, text):
-    t = font(20, True).render(text, True, config.TEXT_WHITE)
-    bg = t.get_rect(center=(config.WIDTH // 2, config.CAPTION_Y)).inflate(20, 10)
-    pygame.draw.rect(surf, (0, 0, 0), bg, border_radius=4)
-    surf.blit(t, t.get_rect(center=(config.WIDTH // 2, config.CAPTION_Y)))
-    h = font(14).render("SPACE skip replay", True, config.TEXT_GRAY)
-    surf.blit(h, h.get_rect(center=(config.WIDTH // 2, config.HEIGHT - 16)))

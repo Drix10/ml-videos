@@ -8,6 +8,24 @@ from mice import Mouse
 from owl import Owl
 
 
+class Spark:  # catch-burst mote: flies out, fades fast
+    __slots__ = ("x", "y", "vx", "vy", "life")
+
+    def __init__(self, x, y, rng):
+        a = rng.uniform(0, 2 * math.pi)
+        s = rng.uniform(1.5, 4.5)
+        self.x, self.y = x, y
+        self.vx, self.vy = math.cos(a) * s, math.sin(a) * s
+        self.life = 1.0
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.94
+        self.vy *= 0.94
+        self.life -= 0.06
+
+
 def _episode_step(brain, owl, mice, rng, level_idx):
     """Shared physics: owl hunts, live mice steer via ONE batched forward pass."""
     owl.update(mice)
@@ -59,6 +77,7 @@ class Arena:  # live, renderable episode of one school (for main.py replay)
         self.out = 0.0
         self.caught = 0
         self.flash = 0  # catch-burst ring timer
+        self.sparks = []  # live particles
 
     def _focus(self):  # camera mouse: first survivor (diagram shows its brain state)
         for m in self.mice:
@@ -74,5 +93,10 @@ class Arena:  # live, renderable episode of one school (for main.py replay)
         if n:
             self.caught += n
             self.flash = 20
+            self.sparks += [Spark(self.owl.x, self.owl.y, self.rng)
+                            for _ in range(10)]
         self.flash = max(0, self.flash - 1)
+        for s in self.sparks:
+            s.update()
+        self.sparks = [s for s in self.sparks if s.life > 0]
         return self.caught >= config.NUM_MICE

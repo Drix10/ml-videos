@@ -6,7 +6,6 @@ FPS = 60
 NETWORK_RECT = (20, 44, 500, 340)   # brain diagram panel
 GAME_RECT = (20, 400, 500, 380)     # arena panel (arena coords are 500x380)
 ARENA_W, ARENA_H = 500, 380
-CAPTION_Y = 812
 
 # Colors: gold-on-midnight (not pink-on-black)
 BG_COLOR = (10, 13, 26)

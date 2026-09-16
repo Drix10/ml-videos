@@ -23,6 +23,7 @@ class Mouse:
         self.angle = float(rng.uniform(0, 2 * math.pi))
         self.alive = True
         self.survived = 0  # frames lived: the fitness that matters
+        self.trail = []  # short motion ribbon (visual only)
 
     def get_inputs(self, owl, level_idx) -> np.ndarray:
         names = config.LEVELS[level_idx]["inputs"]
@@ -57,3 +58,6 @@ class Mouse:
             self.angle = -self.angle
             self.y = min(max(self.y, m), config.ARENA_H - m)
         self.survived += 1
+        self.trail.append((self.x, self.y))
+        if len(self.trail) > 6:
+            self.trail.pop(0)

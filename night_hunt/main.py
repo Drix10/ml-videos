@@ -9,6 +9,7 @@ import numpy as np
 import pygame
 
 import config
+import audio
 import visualizer
 from environment import Arena, simulate
 from evolution import next_generation
@@ -29,15 +30,26 @@ def prune_checkpoints():
 def draw_progress(screen, done, total, level_idx, gen):
     screen.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
-    t = visualizer.font(24, True).render(
-        f"Level {level_idx + 1} \u00b7 {lvl['name']}  gen {gen}", True, config.ACCENT)
-    screen.blit(t, t.get_rect(center=(config.WIDTH / 2, 300)))
-    t2 = visualizer.font(20).render(f"evaluating {done}/{total}", True, config.TEXT_WHITE)
-    screen.blit(t2, t2.get_rect(center=(config.WIDTH / 2, 340)))
-    x0, bw = 70, config.WIDTH - 140
-    pygame.draw.rect(screen, config.DIM_GRAY, (x0, 380, bw, 16), border_radius=8)
-    pygame.draw.rect(screen, config.ACCENT, (x0, 380, bw * done / max(total, 1), 16),
-                     border_radius=8)
+    badge = visualizer.font(13, True).render(f"LEVEL {level_idx + 1}", True,
+                                             config.BG_COLOR)  # gold badge
+    br = badge.get_rect(midtop=(config.WIDTH / 2, 236))
+    pygame.draw.rect(screen, config.ACCENT, br.inflate(20, 8), border_radius=4)
+    screen.blit(badge, br)
+    name = visualizer.font(28, True).render(lvl["name"], True, config.ACCENT)
+    screen.blit(name, name.get_rect(midtop=(config.WIDTH / 2, 262)))
+    gen_t = visualizer.font(14, True, mono=True).render(
+        f"GEN {gen:03d}  {done}/{total}", True, config.TEXT_GRAY)
+    screen.blit(gen_t, gen_t.get_rect(midtop=(config.WIDTH / 2, 306)))
+    bx, bw, bh, by = 70, config.WIDTH - 140, 14, 348  # gradient bar
+    pygame.draw.rect(screen, config.DIM_GRAY, (bx, by, bw, bh), border_radius=7)
+    fill = int(bw * done / max(total, 1))
+    for px in range(fill):
+        r = px / bw
+        pygame.draw.line(screen,
+                         (int(config.ACCENT[0] * (1 - r * 0.4)),
+                          int(config.ACCENT[1] * (1 - r * 0.2)),
+                          int(config.ACCENT[2] * (1 - r * 0.1))),
+                         (bx + px, by), (bx + px, by + bh))
     pygame.display.flip()
 
 
@@ -49,6 +61,7 @@ def level_up_population(pop, fitness, new_size):
 
 
 def main():
+    audio.ensure()  # before pygame.init so mixer settings stick
     pygame.init()
     pygame.display.set_caption("Night Hunt")
     screen = pygame.display.set_mode((config.WIDTH, config.HEIGHT))
@@ -119,9 +132,10 @@ def main():
                         skip = True
                 if skip or arena.step():
                     break
+                if arena.flash == 20:  # fresh catch: pluck
+                    audio.catch()
                 visualizer.draw_network(panel, best, arena.obs, level, new_n)
                 visualizer.draw_arena(game, arena)
-                visualizer.draw_caption(screen, config.LEVELS[level]["caption"])
                 pygame.display.flip()
                 clock.tick(config.FPS)
 
@@ -135,6 +149,26 @@ def main():
                 level += 1  # grow brains, keep learned weights
                 print(f"*** LEVEL UP -> Level {level + 1}: "
                       f"{config.LEVELS[level]['name']} ***", flush=True)
+                if not SKIP_REPLAY:  # gold flash + new sense held 1s (edit point)
+                    audio.levelup()
+                    flash = pygame.Surface((config.WIDTH, config.HEIGHT))
+                    flash.fill(config.ACCENT)
+                    flash.set_alpha(160)
+                    screen.blit(flash, (0, 0))
+                    pygame.display.flip()
+                    pygame.time.wait(120)
+                    sense = config.LEVELS[level]["inputs"][-1]
+                    for _ in range(50):
+                        for e in pygame.event.get():
+                            if e.type == pygame.QUIT:
+                                return
+                        screen.fill(config.BG_COLOR)
+                        t = visualizer.font(34, True).render(
+                            f"+ {sense.upper()}", True, config.ACCENT)
+                        screen.blit(t, t.get_rect(center=(config.WIDTH / 2,
+                                                          config.HEIGHT / 2)))
+                        pygame.display.flip()
+                        clock.tick(60)
                 pop = level_up_population(pop, fit, len(config.LEVELS[level]["inputs"]))
                 gen = 0
                 continue
