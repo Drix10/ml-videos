@@ -5,7 +5,7 @@ An owl hunts 32 mice in the dark. The mice share one tiny brain that
 by level — until the school slips past the owl untouched.
 
 Top half: the brain, thinking live. Bottom half: the hunt.
-Runs at 540×860 (`UI_SCALE = 2` in `config.py` for 1080×1720 recording).
+Exact 540×960 (9:16) — record with no scaling. Captions sit under the arena.
 
 ## What it is trying to do
 

@@ -1,12 +1,13 @@
 # Night hunt: fixed owl vs evolving mice. Portrait UI (phone/Reel-ready).
-WIDTH, HEIGHT = 540, 860  # logical units; x UI_SCALE on screen (1080x1920)
+WIDTH, HEIGHT = 540, 960  # exact 9:16 for Reels (arena physics untouched)
 FPS = 60
-UI_SCALE = 1  # 1 = 540x860 watch window; 2 = crisp 1080x1920 recording
+UI_SCALE = 1  # 1 = 540x960 watch window; 2 = crisp 1080x1920 recording
 
 # Layout
-NETWORK_RECT = (20, 44, 500, 340)   # brain diagram panel
-GAME_RECT = (20, 400, 500, 380)     # arena panel (arena coords are 500x380)
+NETWORK_RECT = (20, 44, 500, 380)   # brain diagram panel
+GAME_RECT = (20, 444, 500, 380)     # arena panel (arena coords are 500x380)
 ARENA_W, ARENA_H = 500, 380
+CAPTION_Y = 868  # caption pill sits under the arena, like the reference
 
 # Colors: gold-on-midnight (not pink-on-black)
 BG_COLOR = (10, 13, 26)

@@ -52,7 +52,7 @@ def _edges(surf, pairs, mul=1):
 
 
 _seen = {}  # level_idx -> tick of first draw (slide-in animation)
-_lab = {}  # label surfaces: (name, gold) -> cached render
+_lab = {}  # label surfaces: (name, gold, alpha-bucket) -> cached render
 _SS = {}  # geometry buffers keyed by panel size (supersampled for AA)
 SS = 2  # geometry rendered 2x then downscaled: lines come out anti-aliased
 
@@ -81,7 +81,7 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
         sliding = p_ < 1.0
         ease = 1 - (1 - p_) ** 3
         first = len(pin) - new_inputs
-        pin = [((70 + (ix - 70) * ease) if i >= first else x, y)
+        pin = [((100 + (ix - 100) * ease) if i >= first else x, y)
                for i, (x, y) in enumerate(pin)]
     mid = top + (len(names) - 1) * gap / 2
     hgap = min(28, (bot - top0) / n_hid)
@@ -131,15 +131,31 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
         X, Y = P(p)
         pygame.draw.circle(surf, A, (int(X), int(Y)), r, max(1, S // 2 + 1))
 
+    now2 = pygame.time.get_ticks()
+    t_in = 1.0
+    if new_inputs and level_idx in _seen:  # labels fade in with the slide
+        t_in = min(1.0, (now2 - _seen[level_idx]) / 450.0)
+        t_in = 1 - (1 - t_in) ** 3
     for i, p in enumerate(pin):  # text pass: fonts are already AA, draw direct
         v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
         gold = i >= first_new or v > 0.5
         X, Y = P(p)
-        lk = (names[i], gold)
-        lab = _lab.get(lk)
-        if lab is None:
-            lab = font(15).render(names[i], True, A if gold else config.DIM_GRAY)
-            _lab[lk] = lab
+        if i >= first_new and new_inputs:  # new labels fade 0 -> opaque
+            alpha = int(255 * t_in)
+            lk = (names[i], gold, alpha // 64)
+            lab = _lab.get(lk)
+            if lab is None:
+                lab = font(15).render(names[i], True,
+                                      A if gold else config.DIM_GRAY).copy()
+                lab.set_alpha(alpha)
+                _lab[lk] = lab
+        else:
+            lk = (names[i], gold, 4)
+            lab = _lab.get(lk)
+            if lab is None:
+                lab = font(15).render(names[i], True,
+                                      A if gold else config.DIM_GRAY)
+                _lab[lk] = lab
         surf.blit(lab, lab.get_rect(right=X - 12 * S, centery=Y))
 
     a = font(20, True).render(f"Level {level_idx + 1} ", True, A)
@@ -219,3 +235,12 @@ def draw_arena(surf, arena):
     surf.blit(t, t.get_rect(topright=(W - 12 * S, 40 * S)))
     pygame.draw.rect(surf, config.ARENA_BORDER, (0, 0, W, H), 2,
                      border_radius=8 * S)  # bright outline, drawn last
+
+
+def draw_caption(surf, text):
+    """Static caption pill under the arena (reference-faithful, no motion)."""
+    t = font(18, True).render(text, True, config.TEXT_WHITE)
+    bg = t.get_rect(center=(config.WIDTH * S / 2, config.CAPTION_Y * S))
+    pygame.draw.rect(surf, (0, 0, 0), bg.inflate(24 * S, 12 * S),
+                     border_radius=6 * S)
+    surf.blit(t, bg)

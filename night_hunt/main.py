@@ -41,17 +41,27 @@ def draw_progress(screen, done, total, level_idx, gen):
     gen_t = visualizer.font(14, True, mono=True).render(
         f"GEN {gen:03d}  {done}/{total}", True, config.TEXT_GRAY)
     screen.blit(gen_t, gen_t.get_rect(midtop=(config.WIDTH * S / 2, 306 * S)))
-    bx, bw, bh, by = 70 * S, (config.WIDTH - 140) * S, 14 * S, 348 * S  # gradient bar
+    bx, bw, bh, by = 70 * S, (config.WIDTH - 140) * S, 14 * S, 348 * S
     pygame.draw.rect(screen, config.DIM_GRAY, (bx, by, bw, bh), border_radius=7)
-    fill = int(bw * done / max(total, 1))
-    for px in range(fill):
-        r = px / bw
-        pygame.draw.line(screen,
-                         (int(config.ACCENT[0] * (1 - r * 0.4)),
-                          int(config.ACCENT[1] * (1 - r * 0.2)),
-                          int(config.ACCENT[2] * (1 - r * 0.1))),
-                         (bx + px, by), (bx + px, by + bh))
+    fill = int(bw * done / max(total, 1))  # pre-rendered gradient, blit slice
+    if fill > 0:
+        screen.blit(_gradient(bw, bh), (bx, by), (0, 0, fill, bh))
     pygame.display.flip()
+
+
+_grad_cache = {}
+
+
+def _gradient(w, h):
+    if (w, h) not in _grad_cache:
+        s = pygame.Surface((w, h))
+        for px in range(w):
+            r = px / w
+            s.fill((int(config.ACCENT[0] * (1 - r * 0.4)),
+                    int(config.ACCENT[1] * (1 - r * 0.2)),
+                    int(config.ACCENT[2] * (1 - r * 0.1))), (px, 0, 1, h))
+        _grad_cache[(w, h)] = s
+    return _grad_cache[(w, h)]
 
 
 def level_up_population(pop, fitness, new_size):
@@ -61,8 +71,9 @@ def level_up_population(pop, fitness, new_size):
             [order[i % len(order)] for i in range(len(pop))]]
 
 
-def showcase(screen, panel, game, clock):
-    """Train-headless workflow: replay each level's all-time best school once."""
+def showcase(screen, panel, game, clock, only=()):
+    """Train-headless workflow: replay each level's all-time best school once.
+    only: optional level numbers (e.g. showcase 2 5)."""
     import csv as _csv
     best = {}  # level -> (gen, fit)
     try:
@@ -75,6 +86,8 @@ def showcase(screen, panel, game, clock):
         print("[showcase] no logs/fitness.csv yet — train first", flush=True)
         return
     for lv in sorted(best):
+        if only and lv not in only:
+            continue
         g, ft = best[lv]
         try:
             brain = Brain.load(f"checkpoints/best_L{lv}_gen{g}.pt",
@@ -97,8 +110,18 @@ def showcase(screen, panel, game, clock):
                 break
             visualizer.draw_network(panel, brain, arena.obs, lv - 1, new_n)
             visualizer.draw_arena(game, arena)
+            visualizer.draw_caption(screen, config.LEVELS[lv - 1]["caption"])
             pygame.display.flip()
             clock.tick(config.FPS)
+
+
+def _showcase_levels():
+    """CLI: `showcase [levels...]`. Also honors SHOWCASE=1 (all levels)."""
+    if len(sys.argv) > 1 and sys.argv[1] == "showcase":
+        return True, {int(a) for a in sys.argv[2:] if a.isdigit()}
+    if os.environ.get("SHOWCASE"):
+        return True, set()
+    return False, set()
 
 
 def main():
@@ -111,8 +134,9 @@ def main():
     panel = screen.subsurface((nx, ny, nw, nh))
     game = screen.subsurface((gx, gy, config.ARENA_W * S, config.ARENA_H * S))
     clock = pygame.time.Clock()
-    if os.environ.get("SHOWCASE"):  # train-headless workflow: play the 6 bests
-        showcase(screen, panel, game, clock)
+    want_show, only = _showcase_levels()
+    if want_show:  # e.g. `python main.py showcase 2 5` or SHOWCASE=1
+        showcase(screen, panel, game, clock, only)
         pygame.quit()
         return
     HEADER = ["level", "generation", "best", "mean", "worst",
@@ -189,6 +213,7 @@ def main():
                     break
                 visualizer.draw_network(panel, best, arena.obs, level, new_n)
                 visualizer.draw_arena(game, arena)
+                visualizer.draw_caption(screen, config.LEVELS[level]["caption"])
                 pygame.display.flip()
                 clock.tick(config.FPS)
 
