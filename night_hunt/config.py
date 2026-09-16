@@ -1,7 +1,7 @@
 # Night hunt: fixed owl vs evolving mice. Portrait UI (phone/Reel-ready).
 WIDTH, HEIGHT = 540, 860  # logical units; x UI_SCALE on screen (1080x1920)
-FPS = 90
-UI_SCALE = 2  # 2 = crisp 1080x1920 recording; 1 = small watch window
+FPS = 60
+UI_SCALE = 1  # 1 = 540x860 watch window; 2 = crisp 1080x1920 recording
 
 # Layout
 NETWORK_RECT = (20, 44, 500, 340)   # brain diagram panel

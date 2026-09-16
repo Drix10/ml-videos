@@ -5,7 +5,7 @@ An owl hunts 32 mice in the dark. The mice share one tiny brain that
 by level — until the school slips past the owl untouched.
 
 Top half: the brain, thinking live. Bottom half: the hunt.
-Renders at 1080×1720 (`UI_SCALE` in `config.py`; set 1 to watch small).
+Runs at 540×860 (`UI_SCALE = 2` in `config.py` for 1080×1720 recording).
 
 ## What it is trying to do
 
@@ -34,7 +34,7 @@ python main.py
 Watch the best school replay each generation. `SPACE` skips boring ones.
 Level-ups hit a gold flash with the new sense held full-screen (edit point).
 Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
-Replays run at 90 FPS. Training is frame-counted, so only replay pace changes.
+Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
 
 ## The 6 levels
 
