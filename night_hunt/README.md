@@ -25,17 +25,12 @@ around it.
 
 ## Two ways to run
 
-- `python main.py` — trains level by level, replaying only level-winners.
-- `SHOWCASE=1 python main.py` — after training, plays each level's all-time
-  best school back-to-back for recording. `SPACE` jumps ahead.
-
-## Two ways to run
-
-- `python main.py` — trains level by level, replaying only level-winners.
-- `SHOWCASE=1 python main.py` — after training, plays each level's all-time
-  best school back-to-back for recording. `SPACE` jumps ahead.
-- `python main.py showcase 2 5` — replay only those levels' bests.
-- Background training: `MAX_GENS=200 SKIP_REPLAY=1 nohup python main.py > train.log 2>&1 &`
+- `python main.py` — trains all levels headless (no window, console only)
+  until the L6 finale clears 1800. Leave it running; close anytime.
+- `python main.py showcase` — the finished video: each level's all-time best
+  replay with level-up cards in between. `SPACE` jumps ahead.
+  `python main.py showcase 2 5` replays just those levels.
+- Background: `MAX_GENS=200 nohup python main.py > train.log 2>&1 &`
 
 ## Run it
 
