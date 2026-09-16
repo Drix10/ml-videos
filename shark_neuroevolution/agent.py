@@ -1,34 +1,69 @@
-"""Shark: holds brain, senses nearest fish, steers."""
+"""Shark: angle-steered agent. Senses depend on level (blind -> full sense)."""
+import math
+
 import numpy as np
 
 import config
 from model import Brain
 
 
-class Shark:
-    def __init__(self, brain=None):
-        self.brain = brain or Brain()
-        self.pos = np.array([config.ARENA_W / 2, config.ARENA_H / 2], float)
-        self.vel = np.zeros(2)
+class Agent:
+    def __init__(self, brain, x=None, y=None):
+        self.brain = brain or Brain(len(config.LEVELS[0]["inputs"]))
+        self.x = config.ARENA_W / 2 if x is None else x
+        self.y = config.ARENA_H / 2 if y is None else y
+        self.angle = float(np.random.uniform(0, 2 * math.pi))
         self.fitness = 0.0
+        self.trail = []
 
-    def sense(self, fish) -> np.ndarray:
-        k = config.INPUT_NODES // 2  # one (dx, dy) pair per slot
-        nearest = sorted((f.pos - self.pos for f in fish),
-                         key=lambda v: v @ v)[:k]
-        obs = np.zeros(config.INPUT_NODES, dtype=np.float32)
-        for i, v in enumerate(nearest):  # dx/W in [-1, 1], no *2 (old code hit [-2, 2])
-            obs[2 * i:2 * i + 2] = v / (config.ARENA_W, config.ARENA_H)
-        return obs  # short fish lists / odd INPUT_NODES just leave zeros
+    def get_inputs(self, fish_list, level_idx) -> np.ndarray:
+        names = config.LEVELS[level_idx]["inputs"]
+        W, H = config.ARENA_W, config.ARENA_H
+        # nearest fish (linear scan is fine: NUM_FISH is small)
+        nd, ndx, ndy, nfx, nfy = float("inf"), 0.0, 0.0, 0.0, 0.0
+        for f in fish_list:
+            if not f.alive:
+                continue
+            dx, dy = f.x - self.x, f.y - self.y
+            d = math.hypot(dx, dy)
+            if d < nd:
+                nd, ndx, ndy, nfx, nfy = d, dx, dy, f.x, f.y
+        if nd == float("inf"):  # no fish left: neutral sensors
+            nd, ndx, ndy = max(W, H), 0.0, 0.0
+        full = {
+            "bias": 1.0,
+            "dist": nd / max(W, H),
+            "dir x": ndx / max(nd, 1.0),
+            "dir y": ndy / max(nd, 1.0),
+            "closing": (math.cos(self.angle) * ndx + math.sin(self.angle) * ndy)
+                       / max(nd, 1.0),
+            "wall \u2191": self.y / H,
+            "wall \u2193": (H - self.y) / H,
+            "wall \u2192": (W - self.x) / W,
+            "wall \u2190": self.x / W,
+            "aim x": nfx / W - 0.5,
+            "aim y": nfy / H - 0.5,
+        }
+        return np.array([full[n] for n in names], dtype=np.float32)
 
-    def step(self, obs):
-        accel = self.brain.act(obs)
-        self.vel = (self.vel * 0.9 + accel * 1.5)
-        sp = np.linalg.norm(self.vel) + 1e-6
-        self.vel *= min(sp, config.SHARK_SPEED) / sp
-        self.pos += self.vel
-        # wall hit must be tested BEFORE clip, else the condition is always False
-        hit = bool((self.pos <= 0).any() or
-                   (self.pos >= (config.ARENA_W, config.ARENA_H)).any())
-        self.pos = np.clip(self.pos, 0, (config.ARENA_W, config.ARENA_H))
-        return hit
+    def update(self, fish_list, level_idx) -> bool:
+        """Sense -> steer -> move -> bounce. Returns True on wall bounce."""
+        W, H = config.ARENA_W, config.ARENA_H
+        obs = self.get_inputs(fish_list, level_idx)
+        out = float(self.brain.act(obs)[0])
+        self.angle = (self.angle + out * 0.15) % (2 * math.pi)
+        self.x += math.cos(self.angle) * config.SHARK_SPEED
+        self.y += math.sin(self.angle) * config.SHARK_SPEED
+        bounced = False
+        if self.x < 0 or self.x > W:  # bounce: mirror angle, clamp inside
+            self.angle = math.pi - self.angle
+            self.x = min(max(self.x, 0), W)
+            bounced = True
+        if self.y < 0 or self.y > H:
+            self.angle = -self.angle
+            self.y = min(max(self.y, 0), H)
+            bounced = True
+        self.trail.append((self.x, self.y))
+        if len(self.trail) > config.MAX_TRAIL:
+            self.trail.pop(0)
+        return bounced

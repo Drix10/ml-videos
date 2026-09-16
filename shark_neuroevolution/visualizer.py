@@ -1,93 +1,117 @@
-"""Draw the brain: sensors left, hidden mid, steering right. |w| = pink width."""
-import numpy as np
+"""Portrait UI: brain diagram (labeled growing inputs) + arena + HUD + caption."""
+import math
+
 import pygame
 
 import config
 
-PINK, GRAY, DIM = (255, 70, 180), (150, 150, 150), (42, 42, 52)
-BG, TXT, FAINT = (8, 8, 14), (210, 210, 220), (110, 110, 125)
-
-_fonts = {}  # module cache: SysFont does disk lookup, never build per-frame
+_fonts = {}  # SysFont does disk lookup: never build per-frame
 
 
-def font(size):
-    if size not in _fonts:
-        _fonts[size] = pygame.font.SysFont(None, size)
-    return _fonts[size]
+def font(size, bold=False):
+    if (size, bold) not in _fonts:
+        _fonts[(size, bold)] = pygame.font.SysFont("arial", size, bold=bold)
+    return _fonts[(size, bold)]
 
 
-def draw(surf, brain, obs, out=None):
+def _edge(surf, a, b, w):  # |w| -> pink + thick, ~0 -> faint gray
+    m = min(1.0, abs(float(w)) * 3)
+    if m < 0.1:
+        color, t = config.DIM_GRAY, 1
+    else:
+        color = tuple(int(config.DIM_GRAY[i] + (config.PINK[i] - config.DIM_GRAY[i]) * m)
+                      for i in range(3))
+        t = max(1, int(m * 3))
+    pygame.draw.line(surf, color, a, b, t)
+
+
+def draw_network(surf, brain, obs, level_idx):
+    surf.fill(config.BG_COLOR)
+    lvl = config.LEVELS[level_idx]
+    names = lvl["inputs"]
+    w = brain.get_weights()
+    w1, w2 = w["w1"], w["w2"]
     W, H = surf.get_size()
-    surf.fill(BG)
-    n_in, n_hid, n_out = config.INPUT_NODES, config.HIDDEN_NODES, config.OUTPUT_NODES
-    w1, b1, w2, _ = brain.get_weights()  # w1: [hid, in], w2: [out, hid]
 
-    f = font(20)
-    surf.blit(f.render("LIVE BRAIN", True, TXT), (12, 8))
-    strong = int(((np.abs(w1) > 0.5).sum() + (np.abs(w2) > 0.5).sum()))
-    surf.blit(font(18).render(f"{strong} strong links", True, PINK), (12, 30))
+    t = font(20, True).render(
+        f"Level {level_idx + 1} / {len(config.LEVELS)} \u00b7 {lvl['name']}",
+        True, config.PINK)
+    surf.blit(t, t.get_rect(center=(W // 2, 14)))
 
-    xs = [W * 0.16, W * 0.50, W * 0.84]
-    top = 66  # reserve room for title + column labels
-    for x, label in zip(xs, ("SENSORS", "HIDDEN", "STEERING")):
-        t = f.render(label, True, FAINT)
-        surf.blit(t, (x - t.get_width() / 2, top - 24))
+    ix, hx, ox = W * 0.30, W * 0.62, W * 0.88  # room for labels left of inputs
+    top, avail = 56, H - 70
+    gap = min(34, avail / max(len(names), 1))
+    pin = [(ix, top + i * gap) for i in range(len(names))]
+    ph = [(hx, top + (i - (config.HIDDEN_NODES - 1) / 2) *
+           min(34, avail / config.HIDDEN_NODES) + avail / 2 - avail / 2)
+          for i in range(config.HIDDEN_NODES)]
+    # center hidden column on inputs block
+    mid = top + (len(names) - 1) * gap / 2
+    hg = min(34, avail / config.HIDDEN_NODES)
+    ph = [(hx, mid + (i - (config.HIDDEN_NODES - 1) / 2) * hg)
+          for i in range(config.HIDDEN_NODES)]
+    po = (ox, mid)
 
-    def ys(n):
-        gap = min(30, (H - top - 16) / max(n, 1))
-        return [top + 8 + i * gap for i in range(n)]
-
-    pin, ph, po = [(xs[0], y) for y in ys(n_in)], [(xs[1], y) for y in ys(n_hid)], \
-                  [(xs[2], y) for y in ys(n_out)]
-
-    def edge(a, b, w):  # |w| -> pink + thick, ~0 -> faint gray
-        m = min(1.0, abs(float(w)) * 2)
-        color = tuple(int(DIM[i] + (PINK[i] - DIM[i]) * m) for i in range(3))
-        pygame.draw.line(surf, color, a, b, 1 + int(m * 4))
-
-    for i, a in enumerate(pin):
+    for i, a in enumerate(pin):  # input -> hidden
         if i < w1.shape[1]:
             for j, b in enumerate(ph):
-                edge(a, b, w1[j, i])
-    for j, a in enumerate(ph):
-        for k, b in enumerate(po):
-            edge(a, b, w2[k, j] if k < w2.shape[0] else 0)
+                _edge(surf, a, b, w1[j, i])
+    for j, a in enumerate(ph):  # hidden -> output
+        _edge(surf, a, po, w2[0, j] if j < w2.shape[1] else 0)
 
-    def node(p, r, color, glow=0.0):  # glow ring on highly active nodes
-        if glow > 0.7:
-            pygame.draw.circle(surf, PINK, (int(p[0]), int(p[1])), r + 3, 1)
-        c = tuple(min(255, v + int(glow * 90)) for v in color)
-        pygame.draw.circle(surf, c, (int(p[0]), int(p[1])), r)
+    for i, p in enumerate(pin):  # labeled input nodes (pink ring = live)
+        v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
+        pygame.draw.circle(surf, config.BG_COLOR, (int(p[0]), int(p[1])), 8)
+        pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 8, 2 if v > 0.05 else 1)
+        if v > 0.7:
+            pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 11, 1)
+        lab = font(15).render(names[i], True,
+                              config.PINK if v > 0.05 else config.TEXT_GRAY)
+        surf.blit(lab, lab.get_rect(right=p[0] - 14, centery=p[1]))
+    for p in ph:  # hidden nodes
+        pygame.draw.circle(surf, config.DIM_GRAY, (int(p[0]), int(p[1])), 6, 1)
+    pygame.draw.circle(surf, config.PINK, (int(po[0]), int(po[1])), 9, 2)  # output
 
-    for i, p in enumerate(pin):
-        node(p, 8, GRAY, min(1, abs(float(obs[i])) if i < len(obs) else 0))
-    hid = np.maximum(0, w1 @ obs[:w1.shape[1]] + b1)  # mirror ReLU for display
-    for j, p in enumerate(ph):
-        node(p, 8, GRAY, min(1, float(hid[j])))
-    for k, p in enumerate(po):  # outputs always pink; value shown in bars below
-        v = float(out[k]) if out is not None and k < len(out) else 0.0
-        node(p, 13, PINK, min(1, abs(v)))
 
-    if out is not None:  # steering bars: ax / ay in [-1, 1]
-        bw, bh = W * 0.10, 8
-        for k, p in enumerate(po):
-            if k >= len(out):
-                break
-            v = max(-1, min(1, float(out[k])))
-            x0 = p[0] - bw / 2
-            y0 = p[1] + 20 + k * 0  # stacked under each output node
-            pygame.draw.rect(surf, DIM, (x0, y0, bw, bh), border_radius=4)
-            cx = x0 + bw / 2  # fill grows left/right from center
-            pygame.draw.rect(surf, PINK,
-                            (cx, y0, (bw / 2) * v, bh) if v >= 0
-                            else (cx + (bw / 2) * v, y0, (bw / 2) * -v, bh),
-                            border_radius=4)
-            t = font(16).render(f"{'ax' if k == 0 else 'ay'} {v:+.2f}", True, TXT)
-            surf.blit(t, (x0 + bw / 2 - t.get_width() / 2, y0 + bh + 2))
+def draw_arena(surf, arena):
+    ox, oy = config.GAME_RECT[0], config.GAME_RECT[1]
+    surf.fill(config.BG_COLOR)
+    pygame.draw.rect(surf, config.ARENA_COLOR, (0, 0, config.ARENA_W, config.ARENA_H),
+                     border_radius=8)
+    s = arena.shark
+    if len(s.trail) > 1:  # fading trail
+        pts = s.trail
+        for i, (a, b) in enumerate(zip(pts[:-1], pts[1:])):
+            al = i / max(len(pts) - 1, 1)
+            pygame.draw.line(surf, (40, int(40 + 60 * al), int(70 + 60 * al)), a, b, 3)
+    for f in arena.fish:  # fish: ellipse body + tail fin
+        if not f.alive:
+            continue
+        pygame.draw.ellipse(surf, config.FISH_COLOR, (f.x - 6, f.y - 3, 12, 6))
+        td = -1 if f.vx > 0 else 1
+        pygame.draw.polygon(surf, config.FISH_COLOR,
+                            [(f.x + 6 * td, f.y), (f.x + 12 * td, f.y - 5),
+                             (f.x + 12 * td, f.y + 5)])
+    if arena.flash:  # eat burst: expanding pink ring
+        pygame.draw.circle(surf, config.PINK, (int(s.x), int(s.y)),
+                           config.SHARK_RADIUS + (20 - arena.flash) * 2, 2)
+    a = s.angle  # shark triangle + pink glow ring
+    pygame.draw.polygon(surf, config.SHARK_COLOR,
+                        [(s.x + math.cos(a) * 18, s.y + math.sin(a) * 18),
+                         (s.x + math.cos(a + 2.5) * 12, s.y + math.sin(a + 2.5) * 12),
+                         (s.x + math.cos(a - 2.5) * 12, s.y + math.sin(a - 2.5) * 12)])
+    pygame.draw.circle(surf, config.PINK, (int(s.x), int(s.y)), 22, 1)
+    left = sum(f.alive for f in arena.fish)
+    surf.blit(font(14).render("ree[g]orithm", True, config.TEXT_WHITE), (10, 8))
+    t = font(14).render(f"{left} / {config.NUM_FISH}\nFISH LEFT", True, config.TEXT_WHITE)
+    surf.blit(t, t.get_rect(topright=(config.ARENA_W - 10, 8)))
+    _ = (ox, oy)  # drawn into subsurface: arena coords already local
 
-    # legend, bottom-left
-    ly = H - 18
-    pygame.draw.line(surf, PINK, (14, ly), (44, ly), 5)
-    surf.blit(font(16).render("strong", True, FAINT), (48, ly - 8))
-    pygame.draw.line(surf, DIM, (120, ly), (150, ly), 1)
-    surf.blit(font(16).render("weak", True, FAINT), (154, ly - 8))
+
+def draw_caption(surf, text):
+    t = font(20, True).render(text, True, config.TEXT_WHITE)
+    bg = t.get_rect(center=(config.WIDTH // 2, config.CAPTION_Y)).inflate(20, 10)
+    pygame.draw.rect(surf, (0, 0, 0), bg, border_radius=4)
+    surf.blit(t, t.get_rect(center=(config.WIDTH // 2, config.CAPTION_Y)))
+    h = font(14).render("SPACE skip replay", True, config.TEXT_GRAY)
+    surf.blit(h, h.get_rect(center=(config.WIDTH // 2, config.HEIGHT - 16)))
