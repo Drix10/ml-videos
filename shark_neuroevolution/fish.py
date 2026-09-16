@@ -5,11 +5,12 @@ import config
 
 
 def spawn_pos(rng, shark_xy=None, min_dist=config.RESPAWN_MIN_DIST):
-    p = rng.uniform([0, 0], [config.ARENA_W, config.ARENA_H])
+    m = config.FISH_MARGIN
+    p = rng.uniform([m, m], [config.ARENA_W - m, config.ARENA_H - m])
     for _ in range(20):  # rejection-sample away from the shark
         if shark_xy is None or np.linalg.norm(p - np.asarray(shark_xy)) >= min_dist:
             return float(p[0]), float(p[1])
-        p = rng.uniform([0, 0], [config.ARENA_W, config.ARENA_H])
+        p = rng.uniform([m, m], [config.ARENA_W - m, config.ARENA_H - m])
     return float(p[0]), float(p[1])  # ponytail: crowded -> accept overlap
 
 
@@ -37,9 +38,10 @@ class Fish:
                 self.vy / sp * config.FISH_SPEED
         self.x += self.vx
         self.y += self.vy
-        if self.x < 0 or self.x > W:  # bounce off walls
+        m = config.FISH_MARGIN
+        if self.x < m or self.x > W - m:  # bounce inside margin: never half-clipped
             self.vx *= -1
-            self.x = min(max(self.x, 0), W)
-        if self.y < 0 or self.y > H:
+            self.x = min(max(self.x, m), W - m)
+        if self.y < m or self.y > H - m:
             self.vy *= -1
-            self.y = min(max(self.y, 0), H)
+            self.y = min(max(self.y, m), H - m)

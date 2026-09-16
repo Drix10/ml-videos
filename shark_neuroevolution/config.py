@@ -6,6 +6,7 @@ FPS = 60
 NETWORK_RECT = (20, 44, 500, 420)   # brain diagram panel
 GAME_RECT = (20, 484, 500, 380)     # arena panel (arena coords are 500x380)
 ARENA_W, ARENA_H = 500, 380
+FISH_MARGIN = 7  # fish bounce inside this inset: no half-clipped fish on edges
 CAPTION_Y = 915
 
 # Colors

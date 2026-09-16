@@ -140,8 +140,13 @@ def draw_arena(surf, arena):
                          (s.x + math.cos(a - 2.5) * 12, s.y + math.sin(a - 2.5) * 12)])
     pygame.draw.circle(surf, config.PINK, (int(s.x), int(s.y)), 22, 1)
     left = sum(f.alive for f in arena.fish)
-    surf.blit(font(14).render("ree[g]orithm", True, config.TEXT_WHITE), (10, 8))
+    logo = font(14).render("ree[g]orithm", True, config.TEXT_WHITE)  # dark pills so
+    pygame.draw.rect(surf, (0, 0, 0), logo.get_rect(topleft=(6, 4)).inflate(8, 4),
+                     border_radius=4)  # fish never swim over the HUD text
+    surf.blit(logo, (10, 8))
     t = font(14).render(f"{left} / {config.NUM_FISH}\nFISH LEFT", True, config.TEXT_WHITE)
+    r = t.get_rect(topright=(config.ARENA_W - 10, 8)).inflate(8, 4)
+    pygame.draw.rect(surf, (0, 0, 0), r, border_radius=4)
     surf.blit(t, t.get_rect(topright=(config.ARENA_W - 10, 8)))
     _ = (ox, oy)  # drawn into subsurface: arena coords already local
 
