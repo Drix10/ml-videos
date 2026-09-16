@@ -23,6 +23,12 @@ around it.
 - Beat the level's score after 10+ generations → brains grow the next sense,
   keeping everything already learned.
 
+## Two ways to run
+
+- `python main.py` — trains level by level, replaying only level-winners.
+- `SHOWCASE=1 python main.py` — after training, plays each level's all-time
+  best school back-to-back for recording. `SPACE` jumps ahead.
+
 ## Run it
 
 ```bash
@@ -42,9 +48,9 @@ Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
 
 | Level | New sense | To pass |
 |---|---|---|
-| 1 · blind | nothing (just `bias`) | 1200 |
+| 1 · blind | nothing (just `bias`) | 1100 |
 | 2 · proximity | how close the owl is | 1150 |
-| 3 · direction | where it's coming from | 1400 |
+| 3 · direction | where it's coming from | 1350 |
 | 4 · intent | is it closing in | 1500 |
 | 5 · walls | where the edges are | 1650 |
 | 6 · full sense | exact owl position | evolves forever |
