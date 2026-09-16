@@ -37,6 +37,7 @@ OUTPUT_NODES = 1  # single steering value in [-1, 1]
 
 # GA
 POPULATION_SIZE = 50
+EVAL_EPISODES = 3  # fitness = mean over episodes: one lucky run can't spike
 MUTATION_RATE = 0.05
 MUTATION_STRENGTH = 0.1
 ELITE_FRACTION = 0.2
@@ -64,16 +65,16 @@ LEVELS = [
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "coming from, and they",
      "description": "Knows the exact direction to the nearest fish.",
-     "threshold": 280, "min_gens": 10},
+     "threshold": 240, "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "Feed it the predator's",
      "description": "Knows if it is closing in or drifting away.",
-     "threshold": 330, "min_gens": 10},
+     "threshold": 300, "min_gens": 10},
     {"name": "walls",     "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
      "caption": "Add wall sensors so",
      "description": "Knows where the walls are to avoid crashing.",
-     "threshold": 380, "min_gens": 10},
+     "threshold": 350, "min_gens": 10},
     {"name": "full sense", "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                       "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190",
                                       "aim x", "aim y"],

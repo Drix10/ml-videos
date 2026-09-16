@@ -57,34 +57,53 @@ def main():
     panel = screen.subsurface((nx, ny, nw, nh))
     game = screen.subsurface((gx, gy, config.ARENA_W, config.ARENA_H))
     clock = pygame.time.Clock()
-    fresh = not os.path.exists("logs/fitness.csv") or os.path.getsize("logs/fitness.csv") == 0
-    log = open("logs/fitness.csv", "a", newline="")  # append: "w" wiped history
+    HEADER = ["level", "generation", "best", "mean", "worst",
+              "catch_best", "catch_mean"]
+    log_path = "logs/fitness.csv"
+    if os.path.exists(log_path) and os.path.getsize(log_path):
+        with open(log_path) as f:  # schema changed? archive, start clean
+            if f.readline().strip() != ",".join(HEADER):
+                try:
+                    os.rename(log_path,
+                              f"logs/fitness_legacy_{int(__import__('time').time())}.csv")
+                except PermissionError:  # live run holds it: use session file
+                    stamp = int(__import__('time').time())
+                    log_path = f"logs/fitness_run_{stamp}.csv"
+                    print(f"[log] fitness.csv locked, writing {log_path}", flush=True)
+    fresh = not os.path.exists(log_path) or os.path.getsize(log_path) == 0
+    log = open(log_path, "a", newline="")  # append: "w" wiped history
     wr = csv.writer(log)
     if fresh:
-        wr.writerow(["level", "generation", "best", "mean", "worst"])
+        wr.writerow(HEADER)
 
     level, gen, total = 0, 0, 0
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
     try:
         while True:
             n_in = len(config.LEVELS[level]["inputs"])
-            fit = np.empty(len(pop))  # chunked eval: pump events, window stays alive
-            for i, b in enumerate(pop):
+            fit = np.empty(len(pop)); ate = np.empty(len(pop))  # chunked eval
+            for i, b in enumerate(pop):  # averaged: a luck spike can't dominate
                 for e in pygame.event.get():
                     if e.type == pygame.QUIT:
                         return
-                fit[i] = simulate(b, level)[0]
+                res = [simulate(b, level) for _ in range(config.EVAL_EPISODES)]
+                fit[i] = sum(f for f, _ in res) / len(res)
+                ate[i] = sum(n for _, n in res) / len(res)
                 if i % 5 == 0 or i == len(pop) - 1:
                     draw_progress(screen, i + 1, len(pop), level, gen)
-            best = pop[int(np.argmax(fit))]
+            bi = int(np.argmax(fit))
+            best = pop[bi]
             wr.writerow([level + 1, gen, round(float(fit.max()), 1),
-                         round(float(fit.mean()), 1), round(float(fit.min()), 1)])
+                         round(float(fit.mean()), 1), round(float(fit.min()), 1),
+                         int(round(ate[bi])), round(float(ate.mean()), 1)])
             log.flush()
             best.save(f"checkpoints/best_L{level + 1}_gen{gen}.pt")
             prune_checkpoints()
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
                   f"best {fit.max():.1f}/{config.LEVELS[level]['threshold']:.0f} "
-                  f"mean {fit.mean():.1f} (gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
+                  f"catch {ate[bi]:.0f}/{config.NUM_FISH} "
+                  f"mean {fit.mean():.1f} (catch {ate.mean():.1f}) "
+                  f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
                   flush=True)
             pygame.display.set_caption(
                 f"Shark Neuroevolution — L{level + 1} gen {gen} best {fit.max():.0f}")

@@ -52,7 +52,7 @@ What happens:
 | Path | Contents |
 |---|---|
 | `checkpoints/best_L{L}_gen{G}.pt` | Best brain per level+generation (last 30 kept) |
-| `logs/fitness.csv` | `level,generation,best,mean,worst` — appended across runs |
+| `logs/fitness.csv` | `level,generation,best,mean,worst,catch_best,catch_mean` — appended; old schemas auto-archived to `fitness_legacy_*.csv` |
 
 To replay a saved brain: `Brain.load(path, input_size)` with the level's
 input count (1, 2, 4, 5, 9, 11), then step an `Arena(brain, level_idx)`.
@@ -63,9 +63,9 @@ input count (1, 2, 4, 5, 9, 11), then step an `Arena(brain, level_idx)`.
 |---|---|---|---|
 | 1 | blind | `bias` | 150 | above blind-luck ceiling (~112) |
 | 2 | proximity | + `dist` | 200 | must beat evolved blind |
-| 3 | direction | + `dir x`, `dir y` | 280 | randoms can't fake aiming anymore |
-| 4 | intent | + `closing` | 330 | chase, don't bump |
-| 5 | walls | + 4 wall sensors | 380 (~37 fish) | near-perfect runs |
+| 3 | direction | + `dir x`, `dir y` | 240 | randoms can't fake aiming anymore |
+| 4 | intent | + `closing` | 300 | chase, don't bump |
+| 5 | walls | + 4 wall sensors | 350 (~33 fish) | near-perfect runs |
 | 6 | full sense | + `aim x`, `aim y` | finale, evolves forever | perfect-aimer ceiling: 409 |
 
 ## What you see
@@ -105,7 +105,9 @@ stay dead, countdown runs. All eaten → `+100` time bonus. Every frame costs
 `IDLE_PENALTY`, every wall bounce costs `WALL_PENALTY` (same in training and
 replay — earlier versions only penalized the replay).
 
-**Fitness** = `10 × eaten + 100 (if cleared) − 0.005 × frames − 0.5 × bounces`.
+**Fitness** = mean over `EVAL_EPISODES` (3) episodes of
+`10 × eaten + 100 (if cleared) − 0.005 × frames − 0.5 × bounces`.
+Averaging kills one-run luck spikes, so elites are consistent hunters, not lottery winners.
 
 ## Experiments (`config.py`)
 
