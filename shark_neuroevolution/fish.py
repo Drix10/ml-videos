@@ -25,8 +25,8 @@ class Fish:
         W, H = config.ARENA_W, config.ARENA_H
         dx, dy = self.x - shark_x, self.y - shark_y
         dist = (dx * dx + dy * dy) ** 0.5
-        if dist < 150:  # flee, stronger when close
-            s = max(0, 1 - dist / 150) * 3 / max(dist, 1)
+        if dist < config.FLEE_RADIUS:  # flee, stronger when close
+            s = max(0, 1 - dist / config.FLEE_RADIUS) * config.FLEE_STRENGTH / max(dist, 1)
             self.vx += dx * s
             self.vy += dy * s
         self.vx += rng.uniform(-0.2, 0.2)  # wander

@@ -81,11 +81,16 @@ def main():
             best.save(f"checkpoints/best_L{level + 1}_gen{gen}.pt")
             prune_checkpoints()
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
-                  f"best {fit.max():.1f} mean {fit.mean():.1f}", flush=True)
+                  f"best {fit.max():.1f}/{config.LEVELS[level]['threshold']:.0f} "
+                  f"mean {fit.mean():.1f} (gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
+                  flush=True)
             pygame.display.set_caption(
                 f"Shark Neuroevolution — L{level + 1} gen {gen} best {fit.max():.0f}")
 
             arena = Arena(best, level)  # rendered replay of best brain
+            fresh = gen < 3  # highlight brand-new senses for first 3 replays
+            prev_n = len(config.LEVELS[level - 1]["inputs"]) if level > 0 else 0
+            new_n = len(config.LEVELS[level]["inputs"]) - prev_n
             for _ in range(config.EPISODE_LENGTH):
                 skip = False
                 for e in pygame.event.get():
@@ -95,14 +100,15 @@ def main():
                         skip = True
                 if skip or arena.step():
                     break
-                visualizer.draw_network(panel, best, arena.obs, level)
+                visualizer.draw_network(panel, best, arena.obs, level, new_n, fresh)
                 visualizer.draw_arena(game, arena)
                 visualizer.draw_caption(screen, config.LEVELS[level]["caption"])
                 pygame.display.flip()
                 clock.tick(config.FPS)
 
-            if level < len(config.LEVELS) - 1 and \
-                    fit.max() >= config.LEVEL_THRESHOLDS[level]:
+            lvl = config.LEVELS[level]
+            if level < len(config.LEVELS) - 1 and gen + 1 >= lvl["min_gens"] \
+                    and fit.max() >= lvl["threshold"]:
                 level += 1  # grow brains, keep learned weights
                 print(f"*** LEVEL UP -> Level {level + 1}: "
                       f"{config.LEVELS[level]['name']} ***", flush=True)

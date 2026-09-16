@@ -25,7 +25,9 @@ def _edge(surf, a, b, w):  # |w| -> pink + thick, ~0 -> faint gray
     pygame.draw.line(surf, color, a, b, t)
 
 
-def draw_network(surf, brain, obs, level_idx):
+def draw_network(surf, brain, obs, level_idx, new_inputs=0, fresh=False):
+    """new_inputs: how many tail inputs are brand-new this level; fresh: highlight
+    them filled-pink for the first replays so viewers SEE the new senses."""
     surf.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
     names = lvl["inputs"]
@@ -62,9 +64,13 @@ def draw_network(surf, brain, obs, level_idx):
     for i, p in enumerate(pin):  # labeled input nodes (pink ring = live)
         v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
         pygame.draw.circle(surf, config.BG_COLOR, (int(p[0]), int(p[1])), 8)
-        pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 8, 2 if v > 0.05 else 1)
-        if v > 0.7:
-            pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 11, 1)
+        is_new = fresh and new_inputs and i >= len(pin) - new_inputs
+        if is_new:  # brand-new sense: filled pink, impossible to miss
+            pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 8)
+        else:
+            pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 8, 2 if v > 0.05 else 1)
+            if v > 0.7:
+                pygame.draw.circle(surf, config.PINK, (int(p[0]), int(p[1])), 11, 1)
         lab = font(15).render(names[i], True,
                               config.PINK if v > 0.05 else config.TEXT_GRAY)
         surf.blit(lab, lab.get_rect(right=p[0] - 14, centery=p[1]))

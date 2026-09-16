@@ -51,7 +51,7 @@ class Agent:
         W, H = config.ARENA_W, config.ARENA_H
         obs = self.get_inputs(fish_list, level_idx)
         out = float(self.brain.act(obs)[0])
-        self.angle = (self.angle + out * 0.15) % (2 * math.pi)
+        self.angle = (self.angle + out * config.TURN_RATE) % (2 * math.pi)
         self.x += math.cos(self.angle) * config.SHARK_SPEED
         self.y += math.sin(self.angle) * config.SHARK_SPEED
         bounced = False

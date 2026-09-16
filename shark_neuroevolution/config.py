@@ -14,16 +14,19 @@ ARENA_COLOR = (24, 24, 24)
 SHARK_COLOR = (255, 255, 255)
 FISH_COLOR = (220, 220, 220)
 PINK = (255, 0, 128)      # active / strong
-DIM_GRAY = (60, 60, 60)   # inactive / weak
+DIM_GRAY = (70, 70, 70)   # weak lines: visible on BG, still clearly "untrained"
 TEXT_WHITE = (240, 240, 240)
 TEXT_GRAY = (120, 120, 120)
 
 # Game
-NUM_FISH = 40
+NUM_FISH = 48
 SHARK_RADIUS = 15
 FISH_RADIUS = 5
-SHARK_SPEED = 3.0
-FISH_SPEED = 3.0
+SHARK_SPEED = 3.5     # faster than fish: hunts must chase, not just bump
+FISH_SPEED = 2.5
+TURN_RATE = 0.05        # slow deliberate turns (was 0.15 spin)
+FLEE_RADIUS = 200       # fish sense danger further out
+FLEE_STRENGTH = 4.0
 MAX_TRAIL = 20
 
 # Brain (inputs grow per level; hidden/output fixed)
@@ -50,25 +53,29 @@ MAX_CHECKPOINTS = 30
 LEVELS = [
     {"name": "blind",     "inputs": ["bias"],
      "caption": "senses, no training, so",
-     "description": "Only knows it exists. Flails randomly."},
+     "description": "Only knows it exists. Flails randomly.",
+     "threshold": 100, "min_gens": 10},
     {"name": "proximity", "inputs": ["bias", "dist"],
      "caption": "Give every fish one",
-     "description": "Knows how far the nearest fish is."},
+     "description": "Knows how far the nearest fish is.",
+     "threshold": 150, "min_gens": 10},
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "coming from, and they",
-     "description": "Knows the exact direction to the nearest fish."},
+     "description": "Knows the exact direction to the nearest fish.",
+     "threshold": 200, "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "Feed it the predator's",
-     "description": "Knows if it is closing in or drifting away."},
+     "description": "Knows if it is closing in or drifting away.",
+     "threshold": 250, "min_gens": 10},
     {"name": "walls",     "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
      "caption": "Add wall sensors so",
-     "description": "Knows where the walls are to avoid crashing."},
+     "description": "Knows where the walls are to avoid crashing.",
+     "threshold": 300, "min_gens": 10},
     {"name": "full sense", "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                       "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190",
                                       "aim x", "aim y"],
      "caption": "Full senses now, and",
-     "description": "Perfect aim. The ultimate predator."},
+     "description": "Perfect aim. The ultimate predator.",
+     "threshold": float("inf"), "min_gens": float("inf")},  # finale: evolves forever
 ]
-# Fitness needed to leave each level (levels 1..5; level 6 is the finale)
-LEVEL_THRESHOLDS = [40, 50, 100, 150, 200]
