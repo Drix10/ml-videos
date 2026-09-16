@@ -9,7 +9,6 @@ import numpy as np
 import pygame
 
 import config
-import audio
 import visualizer
 from environment import Arena, simulate
 from evolution import next_generation
@@ -61,7 +60,6 @@ def level_up_population(pop, fitness, new_size):
 
 
 def main():
-    audio.ensure()  # before pygame.init so mixer settings stick
     pygame.init()
     pygame.display.set_caption("Night Hunt")
     screen = pygame.display.set_mode((config.WIDTH, config.HEIGHT))
@@ -132,8 +130,6 @@ def main():
                         skip = True
                 if skip or arena.step():
                     break
-                if arena.flash == 20:  # fresh catch: pluck
-                    audio.catch()
                 visualizer.draw_network(panel, best, arena.obs, level, new_n)
                 visualizer.draw_arena(game, arena)
                 pygame.display.flip()
@@ -150,7 +146,6 @@ def main():
                 print(f"*** LEVEL UP -> Level {level + 1}: "
                       f"{config.LEVELS[level]['name']} ***", flush=True)
                 if not SKIP_REPLAY:  # gold flash + new sense held 1s (edit point)
-                    audio.levelup()
                     flash = pygame.Surface((config.WIDTH, config.HEIGHT))
                     flash.fill(config.ACCENT)
                     flash.set_alpha(160)

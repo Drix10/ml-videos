@@ -31,9 +31,9 @@ python main.py
 ```
 
 Watch the best school replay each generation. `SPACE` skips boring ones.
-Level-ups hit a gold flash with the new sense held full-screen (edit point),
-plus procedurally synthesized catch/level-up blips — zero audio files.
+Level-ups hit a gold flash with the new sense held full-screen (edit point).
 Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
+Replays run at 144 FPS (a full episode flies by in ~12 s).
 
 ## The 6 levels
 
@@ -56,7 +56,7 @@ Close the window anytime — progress is saved in `logs/` + `checkpoints/`.
 ## Files
 
 `config.py` (all settings) · `model.py` (brain) · `mice.py` (prey) ·
-`owl.py` (fixed hunter) · `environment.py` (episodes) · `audio.py` (synth blips) ·
+`owl.py` (fixed hunter) · `environment.py` (episodes) ·
 `evolution.py` (breeding) · `visualizer.py` (drawing) · `main.py` (run it)
 
 ## If it gets stuck

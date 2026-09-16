@@ -1,6 +1,6 @@
 # Night hunt: fixed owl vs evolving mice. Portrait UI (phone/Reel-ready).
 WIDTH, HEIGHT = 540, 860  # fits laptop screens: nothing cut off at the bottom
-FPS = 60
+FPS = 144
 
 # Layout
 NETWORK_RECT = (20, 44, 500, 340)   # brain diagram panel
