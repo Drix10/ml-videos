@@ -63,7 +63,7 @@ LEVELS = [
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "sense where from, and",
      "description": "Finally flees the right way.",
-     "threshold": 1350, "min_gens": 10},
+     "threshold": 1230, "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
      "caption": "read the lunge before",
      "description": "Cuts away early; the owl overshoots.",
