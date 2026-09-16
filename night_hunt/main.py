@@ -16,6 +16,7 @@ from model import Brain
 
 os.makedirs("checkpoints", exist_ok=True)
 os.makedirs("logs", exist_ok=True)
+S = config.UI_SCALE  # device pixels per logical unit (2 = 1080x1920)
 MAX_GENS = int(os.environ.get("MAX_GENS", "0") or 0)  # 0 = endless
 SKIP_REPLAY = bool(os.environ.get("SKIP_REPLAY", ""))  # headless monitor runs
 
@@ -27,19 +28,21 @@ def prune_checkpoints():
 
 
 def draw_progress(screen, done, total, level_idx, gen):
+    S = config.UI_SCALE
     screen.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
     badge = visualizer.font(13, True).render(f"LEVEL {level_idx + 1}", True,
                                              config.BG_COLOR)  # gold badge
-    br = badge.get_rect(midtop=(config.WIDTH / 2, 236))
-    pygame.draw.rect(screen, config.ACCENT, br.inflate(20, 8), border_radius=4)
+    br = badge.get_rect(midtop=(config.WIDTH * S / 2, 236 * S))
+    pygame.draw.rect(screen, config.ACCENT, br.inflate(20 * S, 8 * S),
+                     border_radius=4 * S)
     screen.blit(badge, br)
     name = visualizer.font(28, True).render(lvl["name"], True, config.ACCENT)
-    screen.blit(name, name.get_rect(midtop=(config.WIDTH / 2, 262)))
+    screen.blit(name, name.get_rect(midtop=(config.WIDTH * S / 2, 262 * S)))
     gen_t = visualizer.font(14, True, mono=True).render(
         f"GEN {gen:03d}  {done}/{total}", True, config.TEXT_GRAY)
-    screen.blit(gen_t, gen_t.get_rect(midtop=(config.WIDTH / 2, 306)))
-    bx, bw, bh, by = 70, config.WIDTH - 140, 14, 348  # gradient bar
+    screen.blit(gen_t, gen_t.get_rect(midtop=(config.WIDTH * S / 2, 306 * S)))
+    bx, bw, bh, by = 70 * S, (config.WIDTH - 140) * S, 14 * S, 348 * S  # gradient bar
     pygame.draw.rect(screen, config.DIM_GRAY, (bx, by, bw, bh), border_radius=7)
     fill = int(bw * done / max(total, 1))
     for px in range(fill):
@@ -62,11 +65,12 @@ def level_up_population(pop, fitness, new_size):
 def main():
     pygame.init()
     pygame.display.set_caption("Night Hunt")
-    screen = pygame.display.set_mode((config.WIDTH, config.HEIGHT))
-    nx, ny, nw, nh = config.NETWORK_RECT
-    gx, gy, _, _ = config.GAME_RECT
+    screen = pygame.display.set_mode((config.WIDTH * S, config.HEIGHT * S))
+    R = lambda r: tuple(v * S for v in r)  # logical rect -> device rect
+    nx, ny, nw, nh = R(config.NETWORK_RECT)
+    gx, gy, _, _ = R(config.GAME_RECT)
     panel = screen.subsurface((nx, ny, nw, nh))
-    game = screen.subsurface((gx, gy, config.ARENA_W, config.ARENA_H))
+    game = screen.subsurface((gx, gy, config.ARENA_W * S, config.ARENA_H * S))
     clock = pygame.time.Clock()
     HEADER = ["level", "generation", "best", "mean", "worst",
               "catch_best", "catch_mean"]
@@ -146,7 +150,7 @@ def main():
                 print(f"*** LEVEL UP -> Level {level + 1}: "
                       f"{config.LEVELS[level]['name']} ***", flush=True)
                 if not SKIP_REPLAY:  # gold flash + new sense held 1s (edit point)
-                    flash = pygame.Surface((config.WIDTH, config.HEIGHT))
+                    flash = pygame.Surface(screen.get_size())
                     flash.fill(config.ACCENT)
                     flash.set_alpha(160)
                     screen.blit(flash, (0, 0))
@@ -160,8 +164,8 @@ def main():
                         screen.fill(config.BG_COLOR)
                         t = visualizer.font(34, True).render(
                             f"+ {sense.upper()}", True, config.ACCENT)
-                        screen.blit(t, t.get_rect(center=(config.WIDTH / 2,
-                                                          config.HEIGHT / 2)))
+                        screen.blit(t, t.get_rect(center=(screen.get_size()[0] / 2,
+                                                          screen.get_size()[1] / 2)))
                         pygame.display.flip()
                         clock.tick(60)
                 pop = level_up_population(pop, fit, len(config.LEVELS[level]["inputs"]))

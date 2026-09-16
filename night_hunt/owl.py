@@ -21,12 +21,13 @@ class Owl:
                                           min(config.OWL_TURN, d))) % (2 * math.pi)
         self.x += math.cos(self.angle) * config.OWL_SPEED
         self.y += math.sin(self.angle) * config.OWL_SPEED
-        if self.x < 0 or self.x > config.ARENA_W:  # bounce, no penalty: it is the exam
+        m = 14  # body extends past center: bounce inside so it never clips edges
+        if self.x < m or self.x > config.ARENA_W - m:
             self.angle = math.pi - self.angle
-            self.x = min(max(self.x, 0), config.ARENA_W)
-        if self.y < 0 or self.y > config.ARENA_H:
+            self.x = min(max(self.x, m), config.ARENA_W - m)
+        if self.y < m or self.y > config.ARENA_H - m:
             self.angle = -self.angle
-            self.y = min(max(self.y, 0), config.ARENA_H)
+            self.y = min(max(self.y, m), config.ARENA_H - m)
         self.trail.append((self.x, self.y))
         if len(self.trail) > config.MAX_TRAIL:
             self.trail.pop(0)
