@@ -30,13 +30,13 @@ def draw_progress(screen, done, total, level_idx, gen):
     screen.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
     t = visualizer.font(24, True).render(
-        f"Level {level_idx + 1} \u00b7 {lvl['name']}  gen {gen}", True, config.PINK)
+        f"Level {level_idx + 1} \u00b7 {lvl['name']}  gen {gen}", True, config.ACCENT)
     screen.blit(t, t.get_rect(center=(config.WIDTH / 2, 300)))
     t2 = visualizer.font(20).render(f"evaluating {done}/{total}", True, config.TEXT_WHITE)
     screen.blit(t2, t2.get_rect(center=(config.WIDTH / 2, 340)))
     x0, bw = 70, config.WIDTH - 140
     pygame.draw.rect(screen, config.DIM_GRAY, (x0, 380, bw, 16), border_radius=8)
-    pygame.draw.rect(screen, config.PINK, (x0, 380, bw * done / max(total, 1), 16),
+    pygame.draw.rect(screen, config.ACCENT, (x0, 380, bw * done / max(total, 1), 16),
                      border_radius=8)
     pygame.display.flip()
 
@@ -101,7 +101,7 @@ def main():
             prune_checkpoints()
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
                   f"best {fit.max():.1f}/{config.LEVELS[level]['threshold']:.0f} "
-                  f"catch {ate[bi]:.0f}/{config.NUM_FISH} "
+                  f"catch {ate[bi]:.0f}/{config.NUM_MICE} "
                   f"mean {fit.mean():.1f} (catch {ate.mean():.1f}) "
                   f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
                   flush=True)

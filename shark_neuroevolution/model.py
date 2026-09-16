@@ -21,6 +21,12 @@ class Brain(nn.Module):
             out = self(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
         return out.numpy()
 
+    def act_batch(self, obs: np.ndarray) -> np.ndarray:
+        """Whole school through one forward pass (32x cheaper than per-mouse)."""
+        with torch.no_grad():
+            out = self(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
+        return out.numpy().ravel()
+
     def get_weights(self):  # for visualizer: w1 [hid, in], b1, w2 [out, hid]
         return {"w1": self.fc1.weight.detach().cpu().numpy(),
                 "b1": self.fc1.bias.detach().cpu().numpy(),

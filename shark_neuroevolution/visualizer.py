@@ -1,9 +1,12 @@
-"""Portrait UI: brain diagram (labeled growing inputs) + arena + HUD + caption."""
+"""Night-hunt UI: gold-on-midnight brain rings + owl/mice arena. No branding."""
 import math
 
 import pygame
 
 import config
+
+A = config.ACCENT  # shorthand: learned / strong / new
+HAIR = (28, 34, 58)  # background edges: visible, never competing
 
 _fonts = {}  # SysFont does disk lookup: never build per-frame
 
@@ -15,13 +18,13 @@ def font(size, bold=False):
 
 
 def _edges(surf, pairs):
-    """pairs: (weight, a, b). Weak first so strong pink lines sit on top."""
+    """pairs: (weight, a, b). Weak first so gold highways sit on top."""
     for wgt, a, b in sorted(pairs, key=lambda e: abs(float(e[0]))):
         m = min(1.0, abs(float(wgt)) * 3)
-        if m < 0.12:  # background hair: barely-there, never competing
-            pygame.draw.line(surf, (30, 30, 42), a, b, 1)
+        if m < 0.12:
+            pygame.draw.line(surf, HAIR, a, b, 1)
         else:
-            color = tuple(int(config.DIM_GRAY[i] + (config.PINK[i] - config.DIM_GRAY[i]) * m)
+            color = tuple(int(config.DIM_GRAY[i] + (A[i] - config.DIM_GRAY[i]) * m)
                           for i in range(3))
             t = 1 + int(m * 3)
             if m > 0.55:  # highways get a halo pass
@@ -30,8 +33,7 @@ def _edges(surf, pairs):
 
 
 def draw_network(surf, brain, obs, level_idx, out=0.0, new_inputs=0, fresh=False):
-    """Reference look: rings + labels only. New senses glow pink (label + ring),
-    old ones rest gray. Two-tone level line sits under the graph."""
+    """Rings + labels only. Newest senses glow gold; two-tone level line below."""
     surf.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
     names = lvl["inputs"]
@@ -50,78 +52,80 @@ def draw_network(surf, brain, obs, level_idx, out=0.0, new_inputs=0, fresh=False
     ph = [(hx, mid + (i - (n_hid - 1) / 2) * hgap) for i in range(n_hid)]
     po = (ox, mid)
 
-    pairs = []  # input -> hidden
+    pairs = []
     for i, a in enumerate(pin):
         if i < w1.shape[1]:
             for j, b in enumerate(ph):
                 pairs.append((w1[j, i], a, b))
-    for j, a in enumerate(ph):  # hidden -> output
+    for j, a in enumerate(ph):
         pairs.append((w2[0, j] if j < w2.shape[1] else 0, a, po))
     _edges(surf, pairs)
 
     n_new = len(pin) - new_inputs if fresh and new_inputs else len(pin)
-    for i, p in enumerate(pin):  # labeled rings; newest senses pink
-        new = i >= n_new
-        v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
-        c = config.PINK if (new or v > 0.5) else config.DIM_GRAY
+    for i, p in enumerate(pin):
+        c = A if i >= n_new else config.DIM_GRAY
         pygame.draw.circle(surf, c, (int(p[0]), int(p[1])), 6, 2)
         lab = font(15).render(names[i], True, c)
         surf.blit(lab, lab.get_rect(right=p[0] - 12, centery=p[1]))
-    for p in ph:  # hidden rings, plain gray like the reference
+    for p in ph:
         pygame.draw.circle(surf, config.DIM_GRAY, (int(p[0]), int(p[1])), 6, 1)
-    pygame.draw.circle(surf, config.PINK, (int(po[0]), int(po[1])), 8, 2)
+    pygame.draw.circle(surf, A, (int(po[0]), int(po[1])), 8, 2)
 
-    a = font(20, True).render(f"Level {level_idx + 1} ", True, config.PINK)
+    a = font(20, True).render(f"Level {level_idx + 1} ", True, A)
     b = font(20, True).render(f"/ {len(config.LEVELS)} \u00b7 {lvl['name']}",
-                              True, config.TEXT_WHITE)  # two-tone level line
+                              True, config.TEXT_WHITE)
     x = W / 2 - (a.get_width() + b.get_width()) / 2
     surf.blit(a, (x, H - 34))
     surf.blit(b, (x + a.get_width(), H - 34))
 
 
 def draw_arena(surf, arena):
-    ox, oy = config.GAME_RECT[0], config.GAME_RECT[1]
     surf.fill(config.BG_COLOR)
     pygame.draw.rect(surf, config.ARENA_COLOR, (0, 0, config.ARENA_W, config.ARENA_H),
                      border_radius=8)
-    s = arena.shark
-    if len(s.trail) > 1:  # fading trail
-        pts = s.trail
+    o = arena.owl
+    if len(o.trail) > 1:  # fading flight trail
+        pts = o.trail
         for i, (a, b) in enumerate(zip(pts[:-1], pts[1:])):
             al = i / max(len(pts) - 1, 1)
-            pygame.draw.line(surf, (40, int(40 + 60 * al), int(70 + 60 * al)), a, b, 3)
-    for f in arena.fish:  # minnows: body + forked tail, oriented to velocity
-        if not f.alive:
+            pygame.draw.line(surf, (30, 34 + int(50 * al), 70 + int(50 * al)), a, b, 3)
+    for m in arena.mice:  # mice: body + ears + tail, oriented to heading
+        if not m.alive:
             continue
-        ca, sa = math.cos(f.angle), math.sin(f.angle)
-        rot = lambda px, py: (f.x + px * ca - py * sa, f.y + px * sa + py * ca)
-        pygame.draw.polygon(surf, config.FISH_COLOR,
-                            [rot(7, 0), rot(1, -2.5), rot(-5, -2),
-                             rot(-5, 2), rot(1, 2.5)])
-        pygame.draw.polygon(surf, config.FISH_COLOR,
-                            [rot(-5, 0), rot(-10, -3.5), rot(-10, 3.5)])
-    if arena.flash:  # eat burst: expanding pink ring
-        pygame.draw.circle(surf, config.PINK, (int(s.x), int(s.y)),
-                           config.SHARK_RADIUS + (20 - arena.flash) * 2, 2)
-    a = s.angle  # shark silhouette: body + forked tail + dorsal + pectoral
-    ca, sa = math.cos(a), math.sin(a)
-    rot = lambda px, py: (s.x + px * ca - py * sa, s.y + px * sa + py * ca)
-    pygame.draw.polygon(surf, config.SHARK_COLOR,  # tail flukes
-                        [rot(-15, 0), rot(-27, -10), rot(-22, 0), rot(-27, 10)])
-    pygame.draw.polygon(surf, config.SHARK_COLOR,  # body
-                        [rot(24, 0), rot(10, -7), rot(-8, -8),
-                         rot(-16, -3), rot(-16, 3), rot(-8, 8), rot(10, 7)])
-    pygame.draw.polygon(surf, config.SHARK_COLOR,  # dorsal fin
-                        [rot(-1, -7), rot(-8, -17), rot(-13, -7)])
-    pygame.draw.polygon(surf, config.SHARK_COLOR,  # pectoral fin
-                        [rot(5, 6), rot(-5, 15), rot(-3, 5)])
-    pygame.draw.circle(surf, config.PINK, (int(s.x), int(s.y)), 26, 1)
-    left = sum(f.alive for f in arena.fish)  # counter only: branding removed
-    n = font(22, True).render(f"{left} / {config.NUM_FISH}", True, config.PINK)
-    surf.blit(n, n.get_rect(topright=(config.ARENA_W - 12, 8)))
-    t = font(13).render("FISH LEFT", True, config.TEXT_GRAY)
-    surf.blit(t, t.get_rect(topright=(config.ARENA_W - 12, 32)))
-    _ = (ox, oy)  # drawn into subsurface: arena coords already local
+        ca, sa = math.cos(m.angle), math.sin(m.angle)
+        rot = lambda px, py: (m.x + px * ca - py * sa, m.y + px * sa + py * ca)
+        pygame.draw.polygon(surf, config.MOUSE_COLOR,
+                            [rot(7, 0), rot(2, -3), rot(-5, -2.5),
+                             rot(-5, 2.5), rot(2, 3)])
+        pygame.draw.circle(surf, config.MOUSE_COLOR, (int(rot(3, -3.5)[0]), int(rot(3, -3.5)[1])), 2)
+        pygame.draw.circle(surf, config.MOUSE_COLOR, (int(rot(3, 3.5)[0]), int(rot(3, 3.5)[1])), 2)
+        pygame.draw.line(surf, config.MOUSE_COLOR, rot(-5, 0), rot(-11, 3), 2)
+    if arena.flash:  # catch burst: expanding gold ring
+        pygame.draw.circle(surf, A, (int(o.x), int(o.y)),
+                           config.OWL_RADIUS + (20 - arena.flash) * 2, 2)
+    ca, sa = math.cos(o.angle), math.sin(o.angle)  # owl silhouette
+    rot = lambda px, py: (o.x + px * ca - py * sa, o.y + px * sa + py * ca)
+    pygame.draw.polygon(surf, config.OWL_COLOR,  # wings (tucked, not star-like)
+                        [rot(-2, -10), rot(-14, -22), rot(-9, -8)])
+    pygame.draw.polygon(surf, config.OWL_COLOR,
+                        [rot(-2, 10), rot(-14, 22), rot(-9, 8)])
+    pygame.draw.polygon(surf, config.OWL_COLOR,  # short wedge tail
+                        [rot(-18, 0), rot(-27, -6), rot(-27, 6)])
+    pygame.draw.polygon(surf, config.OWL_COLOR,  # body
+                        [rot(22, 0), rot(9, -11), rot(-11, -12),
+                         rot(-19, -4), rot(-19, 4), rot(-11, 12), rot(9, 11)])
+    pygame.draw.polygon(surf, config.OWL_COLOR,  # beak
+                        [rot(22, 0), rot(16, -3), rot(16, 3)])
+    pygame.draw.circle(surf, config.BG_COLOR,  # dark eye reads on white head
+                       (int(rot(10, -4)[0]), int(rot(10, -4)[1])), 3)
+    pygame.draw.circle(surf, A, (int(o.x), int(o.y)), 28, 1)  # presence ring
+    left = sum(m.alive for m in arena.mice)  # counter on quiet backing
+    n = font(22, True).render(f"{left} / {config.NUM_MICE}", True, A)
+    nr = n.get_rect(topright=(config.ARENA_W - 12, 8))
+    pygame.draw.rect(surf, config.ARENA_COLOR, nr.inflate(12, 6), border_radius=4)
+    surf.blit(n, nr)
+    t = font(13).render("MICE LEFT", True, config.TEXT_GRAY)
+    surf.blit(t, t.get_rect(topright=(config.ARENA_W - 12, 34)))
 
 
 def draw_caption(surf, text):

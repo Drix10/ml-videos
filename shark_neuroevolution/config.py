@@ -1,4 +1,4 @@
-# Portrait UI (phone/Reel-ready) + level progression
+# Night hunt: fixed owl vs evolving mice. Portrait UI (phone/Reel-ready).
 WIDTH, HEIGHT = 540, 960
 FPS = 60
 
@@ -6,36 +6,35 @@ FPS = 60
 NETWORK_RECT = (20, 44, 500, 420)   # brain diagram panel
 GAME_RECT = (20, 484, 500, 380)     # arena panel (arena coords are 500x380)
 ARENA_W, ARENA_H = 500, 380
-FISH_MARGIN = 7  # fish bounce inside this inset: no half-clipped fish on edges
 CAPTION_Y = 915
 
-# Colors
-BG_COLOR = (18, 18, 18)
-ARENA_COLOR = (24, 24, 24)
-SHARK_COLOR = (255, 255, 255)
-FISH_COLOR = (220, 220, 220)
-PINK = (255, 0, 128)      # active / strong
-DIM_GRAY = (70, 70, 70)   # weak lines: visible on BG, still clearly "untrained"
-TEXT_WHITE = (240, 240, 240)
-TEXT_GRAY = (120, 120, 120)
+# Colors: gold-on-midnight (not pink-on-black)
+BG_COLOR = (10, 13, 26)
+ARENA_COLOR = (15, 20, 38)
+OWL_COLOR = (245, 247, 255)
+MOUSE_COLOR = (228, 234, 248)
+ACCENT = (255, 182, 64)       # learned / strong / new
+DIM_GRAY = (74, 78, 104)      # weak / inactive
+TEXT_WHITE = (232, 236, 248)
+TEXT_GRAY = (130, 138, 170)
 
 # Game
-NUM_FISH = 32
-SHARK_RADIUS = 15
-FISH_RADIUS = 5
-CATCH_RADIUS = 15  # edible distance; shrink to punish accidental bumps
-SHARK_SPEED = 3.5     # faster than fish: hunts must chase, not just bump
-FISH_SPEED = 2.8
-TURN_RATE = 0.05        # slow deliberate turns (was 0.15 spin)
-FLEE_RADIUS = 200       # fish sense danger further out
-FLEE_STRENGTH = 4.0
+NUM_MICE = 32
+OWL_RADIUS = 16
+MOUSE_RADIUS = 5
+CATCH_RADIUS = 12
+OWL_SPEED = 3.2       # fixed threat: faster than any mouse
+OWL_TURN = 0.045       # ...but turns wide, so early cutaways work
+MOUSE_SPEED = 3.0
+TURN_RATE = 0.06      # mouse steering agility
+FISH_MARGIN = 7       # mice bounce inside this inset (no edge clipping)
 MAX_TRAIL = 20
 
 # Brain (inputs grow per level; hidden/output fixed)
 HIDDEN_NODES = 9
 OUTPUT_NODES = 1  # single steering value in [-1, 1]
 
-# GA
+# GA (selection for SURVIVAL now: higher fitness = lived longer)
 POPULATION_SIZE = 50
 EVAL_EPISODES = 3  # fitness = mean over episodes: one lucky run can't spike
 MUTATION_RATE = 0.05
@@ -44,41 +43,39 @@ ELITE_FRACTION = 0.2
 EPISODE_LENGTH = 1800  # 30s at 60fps
 
 # Fitness shaping
-EAT_REWARD = 10.0
-TIME_BONUS = 100.0   # all fish eaten before timeout
-IDLE_PENALTY = 0.005
-WALL_PENALTY = 0.5
-RESPAWN_MIN_DIST = 100  # spawn only (fish die when eaten, no respawn)
+SURVIVE_BONUS = 100.0  # nobody caught before timeout
+IDLE_PENALTY = 0.0     # surviving IS the job; no per-frame tax
+RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
 
-# --- Level progression: the viral mechanic. Each level adds senses. ---
+# --- Level progression: each level grows the prey's senses. ---
 LEVELS = [
     {"name": "blind",     "inputs": ["bias"],
-     "caption": "senses, no training, so",
-     "description": "Only knows it exists. Flails randomly.",
-     "threshold": 150, "min_gens": 10},
+     "caption": "no senses, no fear, so",
+     "description": "Knows nothing. Drifts.",
+     "threshold": 1250, "min_gens": 10},
     {"name": "proximity", "inputs": ["bias", "dist"],
-     "caption": "Give every fish one",
-     "description": "Knows how far the nearest fish is.",
-     "threshold": 200, "min_gens": 10},
+     "caption": "feel how near it",
+     "description": "Bolts when it nears — but which way?",
+     "threshold": 1350, "min_gens": 10},
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
-     "caption": "coming from, and they",
-     "description": "Knows the exact direction to the nearest fish.",
-     "threshold": 240, "min_gens": 10},
+     "caption": "sense where from, and",
+     "description": "Finally flees the right way.",
+     "threshold": 1750, "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
-     "caption": "Feed it the predator's",
-     "description": "Knows if it is closing in or drifting away.",
-     "threshold": 300, "min_gens": 10},
+     "caption": "read the lunge before",
+     "description": "Cuts away early; the owl overshoots.",
+     "threshold": 1600, "min_gens": 10},
     {"name": "walls",     "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
-     "caption": "Add wall sensors so",
-     "description": "Knows where the walls are to avoid crashing.",
-     "threshold": 350, "min_gens": 10},
+     "caption": "learn the edges so",
+     "description": "Stops cornering itself.",
+     "threshold": 1750, "min_gens": 10},
     {"name": "full sense", "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                       "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190",
                                       "aim x", "aim y"],
-     "caption": "Full senses now, and",
-     "description": "Perfect aim. The ultimate predator.",
+     "caption": "untouchable now, and",
+     "description": "A brain from nothing. Still here.",
      "threshold": float("inf"), "min_gens": float("inf")},  # finale: evolves forever
 ]

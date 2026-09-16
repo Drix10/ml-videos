@@ -1,62 +1,78 @@
-"""Arena: headless simulate() for training + live Arena for rendered replay."""
+"""Arena: headless simulate() + live Arena. One brain drives the whole school."""
 import math
 
+import numpy as np
+
 import config
-from agent import Agent
-from fish import Fish
+from mice import Mouse
+from owl import Owl
 
 
-def _episode_step(shark, fish, rng, level_idx):
-    """One shared physics step. Returns fish eaten (0/1+). Both simulate()
-    and Arena use it, so training fitness == replay fitness."""
-    if shark.update(fish, level_idx):
-        shark.fitness -= config.WALL_PENALTY
-    for f in fish:
-        f.update(rng, shark.x, shark.y)
+def _episode_step(brain, owl, mice, rng, level_idx):
+    """Shared physics: owl hunts, live mice steer via ONE batched forward pass."""
+    owl.update(mice)
+    alive = [m for m in mice if m.alive]
+    if alive:
+        obs = np.stack([m.get_inputs(owl, level_idx) for m in alive])
+        turns = brain.act_batch(obs)
+        for m, t in zip(alive, turns):
+            m.update(float(t))
     n = 0
-    for f in fish:
-        if f.alive and math.hypot(shark.x - f.x, shark.y - f.y) < config.CATCH_RADIUS:
-            f.alive = False
+    for m in alive:
+        if math.hypot(owl.x - m.x, owl.y - m.y) < config.CATCH_RADIUS:
+            m.alive = False
             n += 1
-            shark.fitness += config.EAT_REWARD
-    shark.fitness -= config.IDLE_PENALTY
     return n
 
 
+def _fitness(mice, caught):
+    fit = sum(m.survived for m in mice) / max(len(mice), 1)
+    if caught == 0:  # untouched school earns the bonus
+        fit += config.SURVIVE_BONUS
+    return fit
+
+
 def simulate(brain, level_idx, rng=None, steps=config.EPISODE_LENGTH,
-             n_fish=config.NUM_FISH):
-    """Run one episode headless. Returns (fitness, fish_eaten)."""
-    rng = rng or __import__("numpy").random.default_rng()
-    shark = Agent(brain)
-    fish = [Fish(rng, (shark.x, shark.y)) for _ in range(n_fish)]
-    eaten = 0
+             n_mice=config.NUM_MICE):
+    """Run one episode headless. Returns (fitness, mice_caught)."""
+    rng = rng or np.random.default_rng()
+    owl = Owl()
+    mice = [Mouse(brain, rng, (owl.x, owl.y)) for _ in range(n_mice)]
+    caught = 0
     for _ in range(steps):
-        eaten += _episode_step(shark, fish, rng, level_idx)
-        if eaten >= n_fish:
-            shark.fitness += config.TIME_BONUS
+        caught += _episode_step(brain, owl, mice, rng, level_idx)
+        if caught >= n_mice:
             break
-    return shark.fitness, eaten
+    return _fitness(mice, caught), caught
 
 
-class Arena:  # live, renderable episode of one shark (for main.py replay)
+class Arena:  # live, renderable episode of one school (for main.py replay)
     def __init__(self, brain, level_idx, rng=None):
-        import numpy as np
         self.rng = rng or np.random.default_rng()
         self.level_idx = level_idx
-        self.shark = Agent(brain)
-        self.fish = [Fish(self.rng, (self.shark.x, self.shark.y))
-                     for _ in range(config.NUM_FISH)]
-        self.eaten, self.obs = 0, np.zeros(
-            len(config.LEVELS[level_idx]["inputs"]), dtype=np.float32)
+        self.brain = brain
+        self.owl = Owl()
+        self.mice = [Mouse(brain, self.rng, (self.owl.x, self.owl.y))
+                     for _ in range(config.NUM_MICE)]
+        n_in = len(config.LEVELS[level_idx]["inputs"])
+        self.obs = np.zeros(n_in, dtype=np.float32)
         self.out = 0.0
-        self.flash = 0  # eat-burst ring timer
+        self.caught = 0
+        self.flash = 0  # catch-burst ring timer
+
+    def _focus(self):  # camera mouse: first survivor (diagram shows its brain state)
+        for m in self.mice:
+            if m.alive:
+                return m
+        return self.mice[0]
 
     def step(self):
-        self.obs = self.shark.get_inputs(self.fish, self.level_idx)
-        self.out = float(self.shark.brain.act(self.obs)[0])
-        n = _episode_step(self.shark, self.fish, self.rng, self.level_idx)
+        f = self._focus()
+        self.obs = f.get_inputs(self.owl, self.level_idx)
+        self.out = float(self.brain.act(self.obs)[0])
+        n = _episode_step(self.brain, self.owl, self.mice, self.rng, self.level_idx)
         if n:
-            self.eaten += n
+            self.caught += n
             self.flash = 20
         self.flash = max(0, self.flash - 1)
-        return self.eaten >= config.NUM_FISH
+        return self.caught >= config.NUM_MICE
