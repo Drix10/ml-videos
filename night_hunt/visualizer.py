@@ -39,20 +39,22 @@ def _vignette(w, h):
     return _vig[(w, h)]
 
 
-def _edges(surf, pairs):
-    """Weak first so gold highways sit on top. No glow: crisp 1-3px cores."""
+def _edges(surf, pairs, mul=1):
+    """Weak first so gold highways sit on top. mul scales widths for SS passes."""
     for wgt, a, b in sorted(pairs, key=lambda e: abs(float(e[0]))):
         m = min(1.0, abs(float(wgt)) * 3)
         if m < 0.12:
-            pygame.draw.line(surf, HAIR, a, b, 1)
+            pygame.draw.line(surf, HAIR, a, b, max(1, mul))
         else:
             color = tuple(int(config.DIM_GRAY[i] + (A[i] - config.DIM_GRAY[i]) * m)
                           for i in range(3))
-            pygame.draw.line(surf, color, a, b, 1 + int(m * 2))
-    # note: no blit pass — single-pass cores stay razor sharp
+            pygame.draw.line(surf, color, a, b, max(1, (1 + int(m * 2)) * mul))
 
 
 _seen = {}  # level_idx -> tick of first draw (slide-in animation)
+_lab = {}  # label surfaces: (name, gold) -> cached render
+_SS = {}  # geometry buffers keyed by panel size (supersampled for AA)
+SS = 2  # geometry rendered 2x then downscaled: lines come out anti-aliased
 
 
 def draw_network(surf, brain, obs, level_idx, new_inputs=0):
@@ -70,11 +72,13 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     gap = min(28, (bot - top0) / max(len(names), 1))
     top = top0 + ((bot - top0) - (len(names) - 1) * gap) / 2
     pin = [(ix, top + i * gap) for i in range(len(names))]
+    sliding = False
     if new_inputs:  # new senses slide in from the left once per level
         now0 = pygame.time.get_ticks()
         if level_idx not in _seen:
             _seen[level_idx] = now0
         p_ = min(1.0, (now0 - _seen[level_idx]) / 450.0)
+        sliding = p_ < 1.0
         ease = 1 - (1 - p_) ** 3
         first = len(pin) - new_inputs
         pin = [((70 + (ix - 70) * ease) if i >= first else x, y)
@@ -85,31 +89,58 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     po = (ox, mid)
 
     P = lambda p: (p[0] * S, p[1] * S)  # logical -> device
-    pairs = []
-    for i, a in enumerate(pin):
-        if i < w1.shape[1]:
-            for j, b in enumerate(ph):
-                pairs.append((w1[j, i], P(a), P(b)))
-    for j, a in enumerate(ph):
-        pairs.append((w2[0, j] if j < w2.shape[1] else 0, P(a), P(po)))
-    _edges(surf, pairs)
-
+    G = lambda p: (p[0] * S * SS, p[1] * S * SS)  # logical -> supersampled
+    key = (surf.get_size(), id(brain))
+    layer = None if sliding else _SS.get(key)
+    if layer is None:  # static layer: edges + gray base rings, baked once/brain
+        ss = _SS.get(surf.get_size())
+        if ss is None:  # one reusable buffer per panel size (no per-frame alloc)
+            ss = pygame.Surface((surf.get_size()[0] * SS, surf.get_size()[1] * SS))
+            _SS[surf.get_size()] = ss
+        ss.fill(config.BG_COLOR)
+        pairs = []
+        for i, a in enumerate(pin):
+            if i < w1.shape[1]:
+                for j, b in enumerate(ph):
+                    pairs.append((w1[j, i], G(a), G(b)))
+        for j, a in enumerate(ph):
+            pairs.append((w2[0, j] if j < w2.shape[1] else 0, G(a), G(po)))
+        _edges(ss, pairs, SS)
+        for p in pin + ph:  # gray base rings for every node
+            X, Y = G(p)
+            pygame.draw.circle(ss, config.DIM_GRAY, (int(X), int(Y)),
+                               6 * S * SS, SS)
+        X, Y = G(po)
+        pygame.draw.circle(ss, A, (int(X), int(Y)), 8 * S * SS, max(2, S) * SS)
+        layer = pygame.Surface(surf.get_size())
+        pygame.transform.smoothscale(ss, surf.get_size(), layer)
+        if not sliding:  # weights frozen mid-replay: keep 2 zeitgeists max
+            _SS[key] = layer
+            baked = [k for k in _SS if isinstance(k, tuple) and len(k) == 2
+                     and isinstance(k[0], tuple)]
+            for k in baked[:-2]:
+                del _SS[k]
+    surf.blit(layer, (0, 0))
     first_new = len(pin) - new_inputs if new_inputs else len(pin)
-    now = pygame.time.get_ticks()
+    now = pygame.time.get_ticks()  # per frame: gold overlays on live nodes only
     for i, p in enumerate(pin):
         v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
-        live = i >= first_new or v > 0.5
-        c = A if live else config.DIM_GRAY
-        r = (6 + (int(1.5 * math.sin(now * 0.006 + i * 0.8)) if live else 0)) * S
+        if not (i >= first_new or v > 0.5):
+            continue
+        r = (6 + int(1.5 * math.sin(now * 0.006 + i * 0.8))) * S
         X, Y = P(p)
-        pygame.draw.circle(surf, c, (int(X), int(Y)), r, max(1, S // 2 + 1))
-        lab = font(15).render(names[i], True, c)
+        pygame.draw.circle(surf, A, (int(X), int(Y)), r, max(1, S // 2 + 1))
+
+    for i, p in enumerate(pin):  # text pass: fonts are already AA, draw direct
+        v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
+        gold = i >= first_new or v > 0.5
+        X, Y = P(p)
+        lk = (names[i], gold)
+        lab = _lab.get(lk)
+        if lab is None:
+            lab = font(15).render(names[i], True, A if gold else config.DIM_GRAY)
+            _lab[lk] = lab
         surf.blit(lab, lab.get_rect(right=X - 12 * S, centery=Y))
-    for p in ph:
-        X, Y = P(p)
-        pygame.draw.circle(surf, config.DIM_GRAY, (int(X), int(Y)), 6 * S, 1)
-    X, Y = P(po)
-    pygame.draw.circle(surf, A, (int(X), int(Y)), 8 * S, max(2, S))
 
     a = font(20, True).render(f"Level {level_idx + 1} ", True, A)
     b = font(20, True).render(f"/ {len(config.LEVELS)} \u00b7 {lvl['name']}",
