@@ -99,7 +99,11 @@ def main():
                 for e in pygame.event.get():
                     if e.type == pygame.QUIT:
                         return
-                res = [simulate(b, level) for _ in range(config.EVAL_EPISODES)]
+                # common spawns: same layouts for every brain, so score gaps
+                # come from policy, not spawn luck (this makes fitness heritable)
+                res = [simulate(b, level,
+                                rng=np.random.default_rng((level, gen, ep)))
+                       for ep in range(config.EVAL_EPISODES)]
                 fit[i] = sum(f for f, _ in res) / len(res)
                 ate[i] = sum(n for _, n in res) / len(res)
                 if i % 5 == 0 or i == len(pop) - 1:
@@ -118,10 +122,6 @@ def main():
                   f"mean {fit.mean():.1f} (lost {ate.mean():.1f}) "
                   f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
                   flush=True)
-            if gen + 1 >= 25 and fit.max() < config.LEVELS[level]["threshold"]:
-                print(f"[stuck] {gen + 1} gens without passing — "
-                      f"lower threshold {config.LEVELS[level]['threshold']:.0f} "
-                      f"in config.py if this persists", flush=True)
             pygame.display.set_caption(
                 f"Night Hunt — L{level + 1} gen {gen} best {fit.max():.0f}")
 

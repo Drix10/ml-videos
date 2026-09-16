@@ -58,7 +58,7 @@ LEVELS = [
     {"name": "proximity", "inputs": ["bias", "dist"],
      "caption": "feel how near it",
      "description": "Bolts when it nears — but which way?",
-     "threshold": 1180, "min_gens": 10},
+     "threshold": 1150, "min_gens": 10},
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
      "caption": "sense where from, and",
      "description": "Finally flees the right way.",

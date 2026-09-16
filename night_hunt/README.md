@@ -43,7 +43,7 @@ Replays run at 60 FPS. Training is frame-counted, so only replay pace changes.
 | Level | New sense | To pass |
 |---|---|---|
 | 1 · blind | nothing (just `bias`) | 1200 |
-| 2 · proximity | how close the owl is | 1180 |
+| 2 · proximity | how close the owl is | 1150 |
 | 3 · direction | where it's coming from | 1400 |
 | 4 · intent | is it closing in | 1500 |
 | 5 · walls | where the edges are | 1650 |
