@@ -34,6 +34,14 @@ class Brain(nn.Module):
             out = self.forward(torch.from_numpy(np.asarray(obs, dtype=np.float32)))
         return out.numpy().ravel()
 
+    def activations(self, obs: np.ndarray):
+        """Hidden + output acts for one mouse (visualizer live overlay)."""
+        with torch.no_grad():
+            t = torch.from_numpy(np.asarray(obs, dtype=np.float32))
+            h_t = torch.relu(self.fc1(t))
+            o = float(torch.tanh(self.fc2(h_t)).numpy().ravel()[0])
+        return h_t.numpy(), o
+
     def get_weights(self):  # for visualizer: w1 [hid, in], b1, w2 [out, hid]
         return {"w1": self.fc1.weight.detach().cpu().numpy(),
                 "b1": self.fc1.bias.detach().cpu().numpy(),

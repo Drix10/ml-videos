@@ -1,12 +1,27 @@
 # Night hunt: fixed owl vs evolving mice. Portrait UI (phone/Reel-ready).
 WIDTH, HEIGHT = 540, 960  # exact 9:16 for Reels (arena physics untouched)
 FPS = 60
-UI_SCALE = 1  # 1 = 540x960 watch window; 2 = crisp 1080x1920 recording
+UI_SCALE = 1  # watch window: fits the laptop; `video` renders 1080x1920
 
 # Layout
 NETWORK_RECT = (20, 44, 500, 380)   # brain diagram panel
-GAME_RECT = (20, 444, 500, 380)     # arena panel (arena coords are 500x380)
-ARENA_W, ARENA_H = 500, 380
+GAME_RECT = (50, 470, 440, 340)     # arena panel: smaller box, 50px sides,
+ARENA_W, ARENA_H = 440, 340        # 150px of breathing room below
+SHOWCASE_LEVEL_SECS = 7  # montage length per level (6x7 + cards ~= 50s reel)
+
+# Showcase casting: the arc runs bloody -> flawless, all found by sweeping
+# each level's champion x up to 100 seeds for clip deaths (search, not
+# luck) and all fully deterministic. Early levels play their bloodiest
+# takes (the struggle), the finale its flawless one (the payoff):
+# L1 11 lost, L2 9, L3 7, L4 5, L5 3, L6 0 -- counter climbs
+# 21 -> 23 -> 25 -> 27 -> 29 -> 32, two spared per level, none at all
+# when it matters. The untouchable ending.
+SHOWCASE_PICKS = {1: ("checkpoints/best_L1_gen4.pt", (1, 3003)),
+                  2: ("checkpoints/best_L2_gen25.pt", (2, 3009)),
+                  3: ("checkpoints/best_L3_gen14.pt", (3, 5001)),
+                  4: ("checkpoints/best_L4_gen26.pt", (4, 5066)),
+                  5: ("checkpoints/best_L5_gen7.pt", (5, 5027)),
+                  6: ("checkpoints/best_L6_gen9.pt", (6, 1010))}
 
 # Colors: gold-on-midnight (not pink-on-black)
 BG_COLOR = (10, 13, 26)

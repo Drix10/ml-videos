@@ -68,6 +68,8 @@ def _check_config():
         bad.append("0 < ELITE_FRACTION < 1 (else the population grows itself)")
     if config.AUTOBAR_WINDOW < 1:
         bad.append("AUTOBAR_WINDOW >= 1")
+    if config.SHOWCASE_LEVEL_SECS <= 0:
+        bad.append("SHOWCASE_LEVEL_SECS > 0")
     if config.LEVEL_STABLE_GENS >= config.AUTOBAR_AFTER:
         bad.append("LEVEL_STABLE_GENS < AUTOBAR_AFTER")
     if config.SHAKE_AFTER < 1:
@@ -115,50 +117,75 @@ def level_up_population(pop, fitness, new_size):
             [order[i % len(order)] for i in range(len(pop))]]
 
 
-def show_card(screen, clock, lv):
+def _blip(rate=22050, dur=0.12, f0=700, f1=1250):
+    """Catch gulp: short rising chirp with a fast decay. Raw int16 mono."""
+    t = np.arange(int(rate * dur)) / rate
+    f = f0 + (f1 - f0) * t / dur
+    env = np.exp(-t * 18)
+    return (np.sin(2 * np.pi * f * t) * env * 30000).astype(np.int16)
+
+
+def show_card(screen, clock, lv, live=True, sink=None, sc=None):
     """Level-up interstitial: gold flash, then the new sense held full-screen."""
+    sc = S if sc is None else sc  # video renders offscreen at 2x
     flash = pygame.Surface(screen.get_size())
     flash.fill(config.ACCENT)
     flash.set_alpha(160)
     screen.blit(flash, (0, 0))
-    pygame.display.flip()
-    pygame.time.wait(120)
+    if live:
+        pygame.display.flip()
+        pygame.time.wait(120)
+    elif sink is not None:  # video: the same 120ms gold blink, as frames
+        for _ in range(int(0.12 * config.FPS)):
+            sink()
     lvl = config.LEVELS[lv]
     prev = config.LEVELS[lv - 1]["inputs"] if lv > 0 else []
     sense = " + ".join(lvl["inputs"][len(prev):])  # only the NEW senses
     tag = visualizer.font(13, True).render(f"LEVEL {lv + 1}", True,
                                            config.BG_COLOR)
     br = tag.get_rect(center=(screen.get_size()[0] / 2,
-                              screen.get_size()[1] / 2 - 60 * S))
+                              screen.get_size()[1] / 2 - 60 * sc))
     name = visualizer.font(30, True).render(lvl["name"], True, config.ACCENT)
     nr = name.get_rect(center=(screen.get_size()[0] / 2,
-                               screen.get_size()[1] / 2 - 20 * S))
-    plus = visualizer.font(34, True).render(f"+ {sense.upper()}", True,
-                                            config.TEXT_WHITE)
+                               screen.get_size()[1] / 2 - 20 * sc))
+    plus = None
+    size = 34  # long sense lists (L5's four walls) shrink to fit, no overflow
+    while size >= 16:
+        plus = visualizer.font(size, True).render(f"+ {sense.upper()}", True,
+                                                 config.TEXT_WHITE)
+        if plus.get_width() <= screen.get_size()[0] - 30 * sc:
+            break
+        size -= 2
     pr = plus.get_rect(center=(screen.get_size()[0] / 2,
-                               screen.get_size()[1] / 2 + 30 * S))
+                               screen.get_size()[1] / 2 + 30 * sc))
     frames = int(1.5 * config.FPS)  # edit point: hold, SPACE skips
     for _ in range(frames):
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT:
-                return True
-            if e.type == pygame.KEYDOWN and e.key in (pygame.K_SPACE,
-                                                      pygame.K_ESCAPE):
-                return False
+        if live:
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    return True
+                if e.type == pygame.KEYDOWN and e.key in (pygame.K_SPACE,
+                                                          pygame.K_ESCAPE):
+                    return False
         screen.fill(config.BG_COLOR)
-        pygame.draw.rect(screen, config.ACCENT, br.inflate(20 * S, 8 * S),
-                         border_radius=4 * S)
+        pygame.draw.rect(screen, config.ACCENT, br.inflate(20 * sc, 8 * sc),
+                         border_radius=4 * sc)
         screen.blit(tag, br)
         screen.blit(name, nr)
         screen.blit(plus, pr)
-        pygame.display.flip()
-        clock.tick(config.FPS)
+        if sink is not None:
+            sink()
+        else:
+            pygame.display.flip()
+            clock.tick(config.FPS)
     return False
 
 
-def showcase(screen, panel, game, clock, only=()):
+def showcase(screen, panel, game, clock, only=(), live=True, sink=None,
+             sc=None, catch=None):
     """Train-headless workflow: replay each level's all-time best school once.
-    only: optional level numbers (e.g. showcase 2 5)."""
+    only: optional level numbers (e.g. showcase 2 5). catch(), when
+    given, fires on the exact frame the owl lands a mouse."""
     import csv as _csv
     best = {}  # level -> (gen, fit)
     try:
@@ -175,50 +202,142 @@ def showcase(screen, panel, game, clock, only=()):
         if only and lv not in only:
             continue
         if played and not only:  # level-up card stitches the story together
-            if show_card(screen, clock, lv - 1):
+            if show_card(screen, clock, lv - 1, live, sink, sc):
                 return
         played = True
         g, ft = best[lv]
+        pick = config.SHOWCASE_PICKS.get(lv)
         try:
-            brain = Brain.load(f"{CKPTD}/best_L{lv}_gen{g}.pt",
-                               len(config.LEVELS[lv - 1]["inputs"]))
+            n_in = len(config.LEVELS[lv - 1]["inputs"])
+            if pick is None:
+                brain = Brain.load(f"{CKPTD}/best_L{lv}_gen{g}.pt", n_in)
+                seed, tag = (lv, 0), f"gen {g} (fit {ft:.0f})"
+            else:  # hand-picked take (the flawless finale): file + seed
+                ckpt, seed = pick
+                brain = Brain.load(ckpt, n_in)
+                tag = ckpt.split("/")[-1]
         except (FileNotFoundError, RuntimeError) as ex:
             print(f"[showcase] L{lv} gen {g} unreadable ({ex}), skipping",
                   flush=True)
             continue
-        print(f"[showcase] Level {lv} gen {g} (fit {ft:.0f}) — SPACE for next", flush=True)
+        print(f"[showcase] Level {lv} {tag} — SPACE for next", flush=True)
         arena = Arena(brain, lv - 1,
-                      rng=np.random.default_rng((lv, 0)))  # fixed layout:
+                      rng=np.random.default_rng(seed))  # fixed layout:
                       # showcase replays are deterministic — same video every run
         prev_n = len(config.LEVELS[lv - 2]["inputs"]) if lv > 1 else 0
         new_n = len(config.LEVELS[lv - 1]["inputs"]) - prev_n
-        for _ in range(config.EPISODE_LENGTH):
+        n_frames = min(config.EPISODE_LENGTH,
+                       int(config.SHOWCASE_LEVEL_SECS * config.FPS))
+        prev_flash = 0  # catch edge detector, reset per level
+        for _ in range(n_frames):
             nxt = False
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    return
-                if e.type == pygame.KEYDOWN and e.key in (pygame.K_SPACE, pygame.K_ESCAPE):
-                    nxt = True
+            if live:
+                for e in pygame.event.get():
+                    if e.type == pygame.QUIT:
+                        return
+                    if e.type == pygame.KEYDOWN and e.key in (pygame.K_SPACE, pygame.K_ESCAPE):
+                        nxt = True
             if nxt or arena.step():
                 break
+            if arena.flash > 0 and prev_flash == 0 and catch is not None:
+                catch()  # rising edge of the catch-burst timer
+            prev_flash = arena.flash
+            screen.fill(config.BG_COLOR)  # repaint the gaps too: anything
+            # drawn outside the two subsurfaces (e.g. show_card's tag pill
+            # sitting between panel and arena) would otherwise persist
+            # on screen for the whole level.
             visualizer.draw_network(panel, brain, arena.obs, lv - 1, new_n)
             visualizer.draw_arena(game, arena)
-            pygame.display.flip()
-            clock.tick(config.FPS)
+            if sink is not None:
+                sink()
+            else:
+                pygame.display.flip()
+                clock.tick(config.FPS)
+    return
 
 
-def _showcase_levels():
-    """CLI: `showcase [levels...]`. Also honors SHOWCASE=1 (all levels)."""
-    if len(sys.argv) > 1 and sys.argv[1] == "showcase":
-        return True, {int(a) for a in sys.argv[2:] if a.isdigit()}
+def _cli_mode():
+    """CLI: `showcase [levels...]` opens the watch window, `video
+    [levels...]` renders the 1080x1920 mp4. Also honors SHOWCASE=1."""
+    if len(sys.argv) > 1 and sys.argv[1] in ("showcase", "video"):
+        return sys.argv[1], {int(a) for a in sys.argv[2:] if a.isdigit()}
     if os.environ.get("SHOWCASE"):
-        return True, set()
-    return False, set()
+        return "showcase", set()
+    return None, set()
+
+
+def video(only=(), out="night_hunt.mp4", scale=2):
+    """Pixel-perfect 1080x1920 mp4: the showcase re-rendered offscreen
+    and piped straight to ffmpeg -- no screen-recording, no oversized
+    window. Same deterministic replays as the watch window."""
+    import shutil as _sh
+    import subprocess as _sp
+    if _sh.which("ffmpeg") is None:
+        print("[video] ffmpeg not found -- https://ffmpeg.org/download.html",
+              flush=True)
+        return
+    pygame.init()  # dummy driver: surfaces + fonts, no window
+    visualizer.S = scale  # every stroke scales; caches key on device px
+    W, H = config.WIDTH * scale, config.HEIGHT * scale
+    screen = pygame.Surface((W, H))
+    R = lambda r: tuple(v * scale for v in r)
+    nx, ny, nw, nh = R(config.NETWORK_RECT)
+    gx, gy, _, _ = R(config.GAME_RECT)
+    panel = screen.subsurface((nx, ny, nw, nh))
+    game = screen.subsurface((gx, gy, config.ARENA_W * scale,
+                              config.ARENA_H * scale))
+    cmd = ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
+           "-s", f"{W}x{H}", "-r", str(config.FPS), "-i", "-",
+           "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+           "-crf", "17", "-preset", "medium",
+           "-movflags", "+faststart", out]
+    proc = _sp.Popen(cmd, stdin=_sp.PIPE, stdout=_sp.DEVNULL,
+                     stderr=_sp.DEVNULL)
+    try:  # one frame in flight: no disk bloat, ~1min render for ~1min video
+        wall = [0]  # EVERY drawn frame (cards too): the soundtrack clock.
+        # showcase's old frame counter skipped cards, so the wav ran ~7s
+        # short and -shortest chopped the finale -- wall clock never lies.
+        def grab():
+            proc.stdin.write(pygame.image.tostring(screen, "RGB"))
+            wall[0] += 1
+        catches = []
+        showcase(screen, panel, game, None, only, False, grab, scale,
+                 lambda: catches.append(wall[0]))
+    finally:
+        proc.stdin.close()
+        proc.wait()
+    if catches and wall[0]:  # lay the gulps onto the timeline, mux, done
+        import wave as _wv
+        rate = 22050
+        blip = _blip(rate)
+        n = wall[0] * rate // config.FPS + len(blip)
+        track = np.zeros(n, dtype=np.float32)
+        for c in catches:
+            s = c * rate // config.FPS
+            track[s:s + len(blip)] += blip
+        track = np.clip(track, -32768, 32767).astype(np.int16)
+        wav, tmp = out + ".catches.wav", out + ".mux.mp4"
+        with _wv.open(wav, "wb") as f:
+            f.setnchannels(1)
+            f.setsampwidth(2)
+            f.setframerate(rate)
+            f.writeframes(track.tobytes())
+        _sp.run(["ffmpeg", "-y", "-i", out, "-i", wav, "-c:v", "copy",
+                 "-c:a", "aac", "-b:a", "128k", "-shortest", tmp],
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+        os.replace(tmp, out)
+        os.remove(wav)
+        print(f"[video] +{len(catches)} catch sounds", flush=True)
+    pygame.quit()
+    print(f"[video] saved {out} ({W}x{H}@{config.FPS})", flush=True)
 
 
 def main():
-    want_show, only = _showcase_levels()
-    if want_show:  # the ONLY path that opens a window
+    mode, only = _cli_mode()
+    if mode == "video":  # file render: no window at all
+        video(only)
+        return
+    if mode == "showcase":  # the ONLY path that opens a window
         pygame.init()
         pygame.display.set_caption("Night Hunt")
         screen = pygame.display.set_mode((config.WIDTH * S, config.HEIGHT * S))
@@ -229,7 +348,13 @@ def main():
         game = screen.subsurface((gx, gy, config.ARENA_W * S,
                                   config.ARENA_H * S))
         clock = pygame.time.Clock()
-        showcase(screen, panel, game, clock, only)  # e.g. showcase 2 5
+        try:  # catch gulp on the laptop speakers; silent if no audio
+            pygame.mixer.init(frequency=22050)
+            _gulp = pygame.sndarray.make_sound(_blip())
+        except pygame.error:
+            _gulp = None
+        showcase(screen, panel, game, clock, only,
+                 catch=lambda: _gulp.play() if _gulp else None)
         pygame.quit()
         return
     print("[train] headless: no window. Watch the console, "

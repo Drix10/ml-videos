@@ -95,9 +95,14 @@ Event lines: `*** LEVEL UP ***` (with `[wall]` = the next mice requirement),
 - `python main.py` — trains all levels headless (no window, console only)
   until the L6 finale gate (one more mouse past L5's clearing, max 32) clears.
   Leave it running; close anytime.
-- `python main.py showcase` — the finished video: each level's all-time best
-  replay with level-up cards in between. `SPACE` jumps ahead.
-  `python main.py showcase 2 5` replays just those levels.
+- `python main.py showcase` — the finished video: hand-picked takes with
+  level-up cards in between (early levels play their bloodiest
+  takes, the finale its flawless 32/32 — see `SHOWCASE_PICKS` in config).
+  `SPACE` jumps ahead. `python main.py showcase 2 5` replays just those.
+- `python main.py video` — the same video as a 1080x1920 mp4
+  (`night_hunt.mp4`), rendered offscreen straight to ffmpeg, catch
+  gulp laid on the soundtrack. No screen-recording, no oversized
+  window. `video 2 5` renders just those.
 - Background: `MAX_GENS=200 nohup python main.py > train.log 2>&1 &`
 - Resume after stopping (`Ctrl+C` is safe — every generation snapshots):
   `RESUME=1 python main.py` (bash) or
