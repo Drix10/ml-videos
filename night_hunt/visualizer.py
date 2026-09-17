@@ -46,15 +46,14 @@ def _vignette(w, h):
 
 
 def _edges(surf, pairs, mul=1):
-    """Weak first so gold highways sit on top. mul scales widths for SS passes."""
+    """All lines monochrome gray; weight sets width only, never color."""
     for wgt, a, b in sorted(pairs, key=lambda e: abs(float(e[0]))):
         m = min(1.0, abs(float(wgt)) * 3)
         if m < 0.12:
             pygame.draw.line(surf, HAIR, a, b, max(1, mul))
         else:
-            color = tuple(int(config.DIM_GRAY[i] + (A[i] - config.DIM_GRAY[i]) * m)
-                          for i in range(3))
-            pygame.draw.line(surf, color, a, b, max(1, (1 + int(m * 2)) * mul))
+            pygame.draw.line(surf, config.DIM_GRAY, a, b,
+                             max(1, (1 + int(m * 2)) * mul))
 
 
 _seen = {}  # level_idx -> tick of first draw (slide-in animation)
@@ -64,8 +63,7 @@ SS = 2  # geometry rendered 2x then downscaled: lines come out anti-aliased
 
 
 def draw_network(surf, brain, obs, level_idx, new_inputs=0):
-    """Rings + labels only. This level's own senses stay gold (like the reference);
-    older ones glow gold only while their live signal is strong."""
+    """Monochrome rings + labels; no gold anywhere in this panel."""
     surf.fill(config.BG_COLOR)
     lvl = config.LEVELS[level_idx]
     names = lvl["inputs"]
@@ -120,7 +118,8 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
             pygame.draw.circle(ss, config.DIM_GRAY, (int(X), int(Y)),
                                6 * S * SS, SS)
         X, Y = G(po)
-        pygame.draw.circle(ss, A, (int(X), int(Y)), 8 * S * SS, max(2, S) * SS)
+        pygame.draw.circle(ss, config.DIM_GRAY, (int(X), int(Y)),
+                           8 * S * SS, max(2, S) * SS)
         layer = pygame.Surface(surf.get_size())
         pygame.transform.smoothscale(ss, surf.get_size(), layer)
         if not sliding:  # weights frozen mid-replay: keep 2 zeitgeists max
@@ -131,14 +130,6 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
                 del _SS[k]
     surf.blit(layer, (0, 0))
     first_new = len(pin) - new_inputs if new_inputs else len(pin)
-    now = pygame.time.get_ticks()  # per frame: gold overlays on live nodes only
-    for i, p in enumerate(pin):
-        v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
-        if not (i >= first_new or v > 0.5):
-            continue
-        r = (6 + int(1.5 * math.sin(now * 0.006 + i * 0.8))) * S
-        X, Y = P(p)
-        pygame.draw.circle(surf, A, (int(X), int(Y)), r, max(1, S // 2 + 1))
 
     now2 = pygame.time.get_ticks()
     t_in = 1.0
@@ -146,28 +137,26 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
         t_in = min(1.0, (now2 - _seen[level_idx]) / 450.0)
         t_in = 1 - (1 - t_in) ** 3
     for i, p in enumerate(pin):  # text pass: fonts are already AA, draw direct
-        v = min(1, abs(float(obs[i]))) if i < len(obs) else 0
-        gold = i >= first_new or v > 0.5
         X, Y = P(p)
         if i >= first_new and new_inputs:  # new labels fade 0 -> opaque
             alpha = int(255 * t_in)
-            lk = (names[i], gold, alpha // 64)
+            lk = (names[i], alpha // 64)
             lab = _lab.get(lk)
             if lab is None:
                 lab = font(15).render(names[i], True,
-                                      A if gold else config.DIM_GRAY).copy()
+                                      config.DIM_GRAY).copy()
                 lab.set_alpha(alpha)
                 _lab[lk] = lab
         else:
-            lk = (names[i], gold, 4)
+            lk = (names[i], 4)
             lab = _lab.get(lk)
             if lab is None:
-                lab = font(15).render(names[i], True,
-                                      A if gold else config.DIM_GRAY)
+                lab = font(15).render(names[i], True, config.DIM_GRAY)
                 _lab[lk] = lab
         surf.blit(lab, lab.get_rect(right=X - 12 * S, centery=Y))
 
-    a = font(20, True).render(f"Level {level_idx + 1} ", True, A)
+    a = font(20, True).render(f"Level {level_idx + 1} ", True,
+                              config.TEXT_WHITE)
     b = font(20, True).render(f"/ {len(config.LEVELS)} \u00b7 {lvl['name']}",
                               True, config.TEXT_WHITE)
     W = surf.get_size()[0]
@@ -244,12 +233,3 @@ def draw_arena(surf, arena):
     surf.blit(t, t.get_rect(topright=(W - 12 * S, 40 * S)))
     pygame.draw.rect(surf, config.ARENA_BORDER, (0, 0, W, H), 2,
                      border_radius=8 * S)  # bright outline, drawn last
-
-
-def draw_caption(surf, text):
-    """Static caption pill under the arena (reference-faithful, no motion)."""
-    t = font(18, True).render(text, True, config.TEXT_WHITE)
-    bg = t.get_rect(center=(config.WIDTH * S / 2, config.CAPTION_Y * S))
-    pygame.draw.rect(surf, (0, 0, 0), bg.inflate(24 * S, 12 * S),
-                     border_radius=6 * S)
-    surf.blit(t, bg)

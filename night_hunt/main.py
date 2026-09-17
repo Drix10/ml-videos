@@ -47,6 +47,45 @@ if SEED is not None:
     torch.manual_seed(int(SEED))  # also seeds crossover/mutate's draws
     print(f"[seed] fixed at {SEED} — run is fully reproducible", flush=True)
 
+def _check_config():
+    """Fail fast on config edits that would otherwise crash (or silently
+    corrupt) a run hours in: zero divisors, a population that grows itself,
+    an arena the showcase can't draw, a plateau gate that can never open."""
+    bad = []
+    if config.EVAL_EPISODES < 1:
+        bad.append("EVAL_EPISODES >= 1")
+    if config.POPULATION_SIZE < 2:
+        bad.append("POPULATION_SIZE >= 2")
+    if config.NUM_MICE < 1:
+        bad.append("NUM_MICE >= 1")
+    if config.EPISODE_LENGTH < 1:
+        bad.append("EPISODE_LENGTH >= 1")
+    if config.CATCH_RADIUS <= 0:
+        bad.append("CATCH_RADIUS > 0")
+    if config.OWL_SPEED <= 0 or config.MOUSE_SPEED <= 0:
+        bad.append("OWL/MOUSE_SPEED > 0")
+    if not 0 < config.ELITE_FRACTION < 1:
+        bad.append("0 < ELITE_FRACTION < 1 (else the population grows itself)")
+    if config.AUTOBAR_ROUND <= 0:
+        bad.append("AUTOBAR_ROUND > 0")
+    if config.AUTOBAR_WINDOW < 1:
+        bad.append("AUTOBAR_WINDOW >= 1")
+    if config.LEVEL_STABLE_GENS >= config.AUTOBAR_AFTER:
+        bad.append("LEVEL_STABLE_GENS < AUTOBAR_AFTER")
+    if config.SHAKE_AFTER < 1:
+        bad.append("SHAKE_AFTER >= 1")
+    if not 0 <= config.SHAKE_IMMIGRANTS <= 1:
+        bad.append("0 <= SHAKE_IMMIGRANTS <= 1")
+    if (config.ARENA_W, config.ARENA_H) != (config.GAME_RECT[2],
+                                            config.GAME_RECT[3]):
+        bad.append("ARENA_W/H must match GAME_RECT w/h (showcase draws 1:1)")
+    if bad:
+        raise SystemExit("[config] invalid: " + "; ".join(bad))
+
+
+_check_config()
+
+
 def prune_checkpoints():
     import csv as _csv
     keep = set()  # each level's all-time best must survive for showcase
@@ -54,8 +93,11 @@ def prune_checkpoints():
         with open(f"{LOGD}/fitness.csv") as f:
             best = {}
             for row in _csv.DictReader(f):
-                lv, g = int(row["level"]), int(row["generation"])
-                ft = float(row["best"])
+                try:
+                    lv, g = int(row["level"]), int(row["generation"])
+                    ft = float(row["best"])
+                except (KeyError, TypeError, ValueError):
+                    continue  # partial row from a killed run: skip, don't crash
                 if lv not in best or ft > best[lv][1]:
                     best[lv] = (g, ft)
             keep = {os.path.normpath(f"{CKPTD}/best_L{lv}_gen{g}.pt")
@@ -97,10 +139,6 @@ def show_card(screen, clock, lv):
                                             config.TEXT_WHITE)
     pr = plus.get_rect(center=(screen.get_size()[0] / 2,
                                screen.get_size()[1] / 2 + 30 * S))
-    cap = visualizer.font(18, True).render(lvl["caption"], True,
-                                           config.TEXT_GRAY)
-    cr = cap.get_rect(center=(screen.get_size()[0] / 2,
-                              screen.get_size()[1] / 2 + 70 * S))
     frames = int(1.5 * config.FPS)  # edit point: hold, SPACE skips
     for _ in range(frames):
         for e in pygame.event.get():
@@ -115,7 +153,6 @@ def show_card(screen, clock, lv):
         screen.blit(tag, br)
         screen.blit(name, nr)
         screen.blit(plus, pr)
-        screen.blit(cap, cr)
         pygame.display.flip()
         clock.tick(config.FPS)
     return False
@@ -152,7 +189,9 @@ def showcase(screen, panel, game, clock, only=()):
                   flush=True)
             continue
         print(f"[showcase] Level {lv} gen {g} (fit {ft:.0f}) — SPACE for next", flush=True)
-        arena = Arena(brain, lv - 1)
+        arena = Arena(brain, lv - 1,
+                      rng=np.random.default_rng((lv, 0)))  # fixed layout:
+                      # showcase replays are deterministic — same video every run
         prev_n = len(config.LEVELS[lv - 2]["inputs"]) if lv > 1 else 0
         new_n = len(config.LEVELS[lv - 1]["inputs"]) - prev_n
         for _ in range(config.EPISODE_LENGTH):
@@ -166,7 +205,6 @@ def showcase(screen, panel, game, clock, only=()):
                 break
             visualizer.draw_network(panel, brain, arena.obs, lv - 1, new_n)
             visualizer.draw_arena(game, arena)
-            visualizer.draw_caption(screen, config.LEVELS[lv - 1]["caption"])
             pygame.display.flip()
             clock.tick(config.FPS)
 
@@ -228,20 +266,33 @@ def main():
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
     bars = {}  # level -> current bar (autobar may lower a wall, loudly)
     hist = []  # recent gen-bests at this level (autobar's evidence)
+    level_best, since_improve, shake_left = -1.0, 0, 0  # plateau clock + shake state
     snap_path = f"{CKPTD}/resume.pt"
     if RESUME and os.path.exists(snap_path):
-        snap = torch.load(snap_path, map_location="cpu", weights_only=True)
-        if len(snap["pop"]) != config.POPULATION_SIZE:
-            print("[resume] population size changed, starting fresh", flush=True)
-        else:
+        try:
+            snap = torch.load(snap_path, map_location="cpu", weights_only=True)
+            if len(snap["pop"]) != config.POPULATION_SIZE:
+                raise ValueError("population size changed")
             level, gen, total = snap["level"], snap["gen"], snap["total"]
+            if not 0 <= level < len(config.LEVELS):
+                raise ValueError(f"level {level} out of range")
             pop = [Brain(len(config.LEVELS[level]["inputs"]))
                    for _ in range(config.POPULATION_SIZE)]
             for b, sd in zip(pop, snap["pop"]):
-                b.load_state_dict(sd)
+                b.load_state_dict(sd)  # raises on shape mismatch (config edited)
             bars = snap.get("bars", {})
+            level_best = snap.get("level_best", -1.0)
+            since_improve = snap.get("since_improve", 0)
+            shake_left = snap.get("shake_left", 0)
             print(f"[resume] Level {level + 1} gen {gen} "
                   f"({total} gens so far)", flush=True)
+        except Exception as ex:  # corrupt file, old schema, edited config:
+            print(f"[resume] unreadable ({ex}), starting fresh", flush=True)
+            level, gen, total = 0, 0, 0
+            pop = [Brain(len(config.LEVELS[0]["inputs"]))
+                   for _ in range(config.POPULATION_SIZE)]
+            bars, hist = {}, []
+            level_best, since_improve, shake_left = -1.0, 0, 0
     elif RESUME:
         print(f"[resume] no checkpoint at {snap_path}, starting fresh",
               flush=True)
@@ -250,7 +301,9 @@ def main():
         # (or MAX_GENS-capped) night really does lose nothing — see the
         # MAX_GENS fix note further down for why this used to be false.
         torch.save({"level": level, "gen": gen, "total": total,
-                    "pop": [b.state_dict() for b in pop], "bars": bars},
+                    "pop": [b.state_dict() for b in pop], "bars": bars,
+                    "level_best": level_best, "since_improve": since_improve,
+                    "shake_left": shake_left},
                    snap_path)
 
     try:
@@ -281,7 +334,15 @@ def main():
             bar = bars.setdefault(level, lvl["threshold"] if not last
                                   else config.FINALE_TARGET)
             hist.append(float(fit.max()))
-            hist = hist[-10:]
+            hist = hist[-config.AUTOBAR_WINDOW:]
+            # Plateau clock BEFORE the print so `stuck N` shows this gen,
+            # not last gen's. Fixed layouts + elitism => fit.max() is
+            # non-decreasing within a level, so a flat clock means genuine
+            # mastery (or a genuine ceiling), never noise.
+            if float(fit.max()) > level_best + config.LEVEL_IMPROVE_EPS:
+                level_best, since_improve = float(fit.max()), 0
+            else:
+                since_improve += 1
             wr.writerow([level + 1, gen, round(float(fit.max()), 1),
                          round(float(fit.mean()), 1), round(float(fit.min()), 1),
                          int(round(ate[bi])), round(float(ate.mean()), 1)])
@@ -292,32 +353,57 @@ def main():
                   f"best {fit.max():.1f}/{bar:.0f} "
                   f"lost {ate[bi]:.0f}/{config.NUM_MICE} "
                   f"mean {fit.mean():.1f} (lost {ate.mean():.1f}) "
-                  f"(gen {gen + 1}/{config.LEVELS[level]['min_gens']})",
+                  f"(min {config.LEVELS[level]['min_gens']} gens, "
+                  f"stuck {since_improve})",
                   flush=True)
 
             leveling = not last and gen + 1 >= lvl["min_gens"] \
-                and fit.max() >= bar
+                and since_improve >= config.LEVEL_STABLE_GENS and fit.max() >= bar
             finale = last and gen + 1 >= lvl["min_gens"] \
-                and fit.max() >= bar
-            if not (leveling or finale) and gen + 1 >= 30 and len(hist) == 10:
-                # autobar: a wall wastes nights. The median of recent bests
-                # recurs ~every other gen, so this bar ALWAYS falls soon.
-                new_bar = min(bar, float(np.median(hist)) + 10)
+                and since_improve >= config.LEVEL_STABLE_GENS and fit.max() >= bar
+
+            if not (leveling or finale) and gen + 1 >= config.AUTOBAR_AFTER \
+                    and len(hist) == config.AUTOBAR_WINDOW:
+                # autobar: an unreachable wall wastes nights forever. Snap the
+                # median of recent bests DOWN to a clean multiple so the new
+                # bar is always a number already beaten (a flat plateau
+                # clears next gen instead of grinding on a near-miss).
+                new_bar = min(bar, (float(np.median(hist))
+                                    // config.AUTOBAR_ROUND) * config.AUTOBAR_ROUND)
                 if new_bar < bar - 1:
                     print(f"[autobar] L{level + 1} bar {bar:.0f} -> "
                           f"{new_bar:.0f} after {gen + 1} stuck gens",
                           flush=True)
                     bars[level] = bar = new_bar
-                    # Re-derive with the SAME gate as above (min_gens included).
-                    # Right now every level's min_gens (<=10) is well under
-                    # the 30-gen floor that unlocks autobar, so dropping the
-                    # check here was harmless in practice — but silently
-                    # relying on that made it a landmine for the next config
-                    # edit. Keep the gate explicit.
+                    # Re-derive with the SAME gate as above (min_gens and the
+                    # plateau clause both included). autobar only fires after
+                    # AUTOBAR_AFTER stuck gens, well past LEVEL_STABLE_GENS,
+                    # so that clause is always true here in practice -- keep
+                    # it explicit anyway instead of relying on that staying
+                    # true across future config edits.
                     leveling = not last and gen + 1 >= lvl["min_gens"] \
+                        and since_improve >= config.LEVEL_STABLE_GENS \
                         and fit.max() >= bar
                     finale = last and gen + 1 >= lvl["min_gens"] \
+                        and since_improve >= config.LEVEL_STABLE_GENS \
                         and fit.max() >= bar
+
+            # Stagnation shake: fires when a plateau (since_improve already
+            # nonzero) has run SHAKE_AFTER gens past that without the bar
+            # ever getting crossed -- i.e. only when the ordinary plateau
+            # gate above did NOT just clear the level. Retriggers every
+            # SHAKE_AFTER gens for as long as the stall continues, each time
+            # giving the search a fresh burst of diversity before falling
+            # back to autobar as the last resort.
+            if not (leveling or finale) and since_improve > 0 \
+                    and since_improve % config.SHAKE_AFTER == 0:
+                shake_left = config.SHAKE_DURATION
+                print(f"[shake] L{level + 1} stuck {since_improve} gens "
+                      f"without a real gain -> mutation x"
+                      f"{config.SHAKE_MUTATION_MULT:.0f} + "
+                      f"{config.SHAKE_IMMIGRANTS:.0%} fresh brains for "
+                      f"{config.SHAKE_DURATION} gens", flush=True)
+
             total += 1  # every generation counts, level-up or not
 
             # NOTE on ordering, all three branches below: MAX_GENS/finale
@@ -334,9 +420,24 @@ def main():
                 print(f"*** LEVEL UP -> Level {level + 2}: "
                       f"{config.LEVELS[level + 1]['name']} ***", flush=True)
                 level += 1
+                # Next wall from THIS clearing fitness: next clean multiple
+                # of AUTOBAR_ROUND above it, plus one notch -- always
+                # exactly one step above what this population just proved
+                # capable of. Reachable, never a fantasy number pulled from
+                # nowhere, and never a fractional/odd-looking value either.
+                bars[level] = min(
+                    (float(fit.max()) // config.AUTOBAR_ROUND + 1)
+                    * config.AUTOBAR_ROUND + config.NEXT_BAR_MARGIN,
+                    config.EPISODE_LENGTH + config.SURVIVE_BONUS)  # max
+                    # achievable: a perfect school scores exactly this. Without
+                    # the clamp, clearing at 1900 would set an unpassable 1950
+                    # wall and burn 30 gens before autobar rescues it.
+                print(f"[wall] L{level + 1} bar set to {bars[level]:.0f} "
+                      f"(cleared L{level} at {fit.max():.0f})", flush=True)
                 pop = level_up_population(pop, fit, len(config.LEVELS[level]["inputs"]))
                 gen = 0
                 hist = []
+                level_best, since_improve, shake_left = -1.0, 0, 0
                 save_snapshot()
                 if MAX_GENS and total >= MAX_GENS:
                     print(f"[monitor] capped at {total} generations", flush=True)
@@ -355,7 +456,15 @@ def main():
                       f"to record the video ***", flush=True)
                 return
 
-            pop = next_generation(pop, fit)
+            pop = next_generation(
+                pop, fit,
+                mutation_rate=(config.MUTATION_RATE * config.SHAKE_MUTATION_MULT
+                               if shake_left > 0 else None),
+                mutation_strength=(config.MUTATION_STRENGTH * config.SHAKE_MUTATION_MULT
+                                   if shake_left > 0 else None),
+                immigrant_frac=config.SHAKE_IMMIGRANTS if shake_left > 0 else 0.0)
+            if shake_left > 0:
+                shake_left -= 1
             gen += 1
             save_snapshot()  # resume.pt: a killed (or capped) night loses nothing
             if MAX_GENS and total >= MAX_GENS:
