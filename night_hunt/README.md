@@ -17,9 +17,10 @@ around it.
 ## How it works (simple version)
 
 - Every mouse in a school runs the **same brain**: senses in, turn direction out.
-- One episode = 1800 frames (30s) of owl vs school. Score = living mice x 1000
+- One episode = 1800 frames (30s) of owl vs school. Score = living mice x 2000
   + mean frames lived: **deaths dominate, time breaks ties**. One extra
-  survivor (+1000) always beats any survival-time gain (max ~1800).
+  survivor (+2000) always beats any survival-time gain (max 1800) —
+  mathematically, not just usually.
 - The owl (2.2) is slower than mice (3.0) and only a true hit counts
   (catch radius 7), so fleeing straight away genuinely escapes — while blind
   drifters still get vacuumed (~14/32). That gap is what each new sense
@@ -55,7 +56,7 @@ Say the school is on Level 3 (`direction`) at generation 12:
    tournament + crossover + mutation.
 2. Each brain drives all 32 mice through 5 fixed 1800-frame
    nights (same seeds every gen, so gains mean better genes).
-3. Fitness = living mice x 1000 + mean frames lived (deaths dominate,
+3. Fitness = living mice x 2000 + mean frames lived (deaths dominate,
    time breaks ties).
 4. Best score, death count, and population mean print to console;
    best-per-level and the full population snapshot save to disk.
@@ -76,7 +77,7 @@ Level 1 (blind) | gen 0 | best 21.0/-- mice lost 11/32 (lost 14.4) (min 10 gens,
 
 - `best 21.0/-- mice` — champion's mean survivors vs the mice required.
   L1 shows `--`: the baseline clears on plateau alone. Fitness still ranks
-  brains behind the scenes (1000 per mouse + time), but only mice open
+  brains behind the scenes (2000 per mouse + time), but only mice open
   doors — the same 21 survivors with better time can never advance a level.
 - `lost 10/32` — what the best brain lost. **This is the number that matters:**
   it should fall level by level (~12 → ~10 → ~9 → … → 0).

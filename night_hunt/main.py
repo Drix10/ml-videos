@@ -341,11 +341,21 @@ def main():
             survhist = survhist[-config.AUTOBAR_WINDOW:]
             req = need.get(level)  # None on L1: baseline clears on plateau
             # Plateau clock BEFORE the print so `stuck N` shows this gen,
-            # not last gen's. Fixed layouts + elitism => fit.max() is
-            # non-decreasing within a level, so a flat clock means genuine
-            # mastery (or a genuine ceiling), never noise.
-            if float(fit.max()) > level_best + config.LEVEL_IMPROVE_EPS:
-                level_best, since_improve = float(fit.max()), 0
+            # not last gen's. Tracks `surv` (survivors), NOT fit.max():
+            # fitness has a small survival-TIME tie-breaker on top of the
+            # dominant survivor-count term, and that tie-breaker has
+            # continuous headroom to creep a few points every generation
+            # (finer escape timing) even while survivor count -- the only
+            # thing the gate below actually checks -- stays exactly flat.
+            # Tracking fit.max() here meant since_improve could get reset
+            # every single generation forever on pure time-score creep,
+            # so the plateau gate might NEVER fire even after a level had
+            # already earned its exit. Fixed layouts + elitism still make
+            # `surv` non-decreasing within a level, so a flat clock on
+            # `surv` means genuine mastery (or a genuine ceiling), never
+            # noise.
+            if float(surv) > level_best + config.LEVEL_IMPROVE_EPS:
+                level_best, since_improve = float(surv), 0
             else:
                 since_improve += 1
             wr.writerow([level + 1, gen, round(float(fit.max()), 1),

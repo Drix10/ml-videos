@@ -52,8 +52,14 @@ MUTATION_STRENGTH = 0.07  # small steps: keeps children near parents (heritable)
 ELITE_FRACTION = 0.2
 EPISODE_LENGTH = 1800  # 30s at 60fps
 
-# Fitness shaping: deaths dominate, survival time breaks ties
-SURVIVOR_WEIGHT = 1000  # one saved mouse outweighs any time gain (max ~1800)
+# Fitness shaping: deaths dominate, survival time breaks ties. Must exceed
+# EPISODE_LENGTH -- otherwise a mutant that saves ONE FEWER mouse but
+# survives much longer on average can out-fitness a mutant that genuinely
+# saves more, since 1000 < 1800 lets the time term flip the ordering. At
+# 2000 > EPISODE_LENGTH, one extra survivor mathematically always wins
+# regardless of the time term, so argmax(fit) always means "most mice
+# saved, longest survival among those" -- never the reverse.
+SURVIVOR_WEIGHT = 2000  # one saved mouse outweighs any time gain (max EPISODE_LENGTH)
 RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
