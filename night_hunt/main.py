@@ -363,7 +363,14 @@ def main():
                 and since_improve >= config.LEVEL_STABLE_GENS and fit.max() >= bar
 
             if not (leveling or finale) and gen + 1 >= config.AUTOBAR_AFTER \
-                    and len(hist) == config.AUTOBAR_WINDOW:
+                    and len(hist) == config.AUTOBAR_WINDOW \
+                    and since_improve >= config.LEVEL_STABLE_GENS:
+                # autobar is for flat-broke walls, NOT slow climbs: the plateau
+                # clause distinguishes them. Without it, autobar fires on gen
+                # count alone — e.g. L2 climbing +44 over 28 gens, 15pts from
+                # its wall, got "rescued" to a cheaper bar one gen after a
+                # +14 improvement. A level that is still improving is learning,
+                # not stuck, so the bar stays up until the climb flatlines.
                 # autobar: an unreachable wall wastes nights forever. Snap the
                 # median of recent bests DOWN to a clean multiple so the new
                 # bar is always a number already beaten (a flat plateau
@@ -372,7 +379,8 @@ def main():
                                     // config.AUTOBAR_ROUND) * config.AUTOBAR_ROUND)
                 if new_bar < bar - 1:
                     print(f"[autobar] L{level + 1} bar {bar:.0f} -> "
-                          f"{new_bar:.0f} after {gen + 1} stuck gens",
+                          f"{new_bar:.0f} after {gen + 1} gens here "
+                          f"(stuck {since_improve})",
                           flush=True)
                     bars[level] = bar = new_bar
                     # Re-derive with the SAME gate as above (min_gens and the

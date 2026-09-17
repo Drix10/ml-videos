@@ -31,6 +31,57 @@ around it.
   above it, +25 (`[wall]` on console). The ladder measures the school
   against itself; brains grow the next sense, keeping everything learned.
 
+## What's inside the brain
+
+One shared MLP, 9 hidden units, small enough to read in one sitting:
+
+- `fc1` turns the current senses (1 → 3 → 4 → 5 → 9 → 11 across levels)
+  into hidden activity; ReLU keeps it nonlinear and cheap.
+- `fc2` turns hidden activity into one steering value; tanh bounds it
+  to a turn command.
+- `grow()` widens `fc1` at level-up: old columns copied exactly, new
+  sensor columns start near zero — so the school never forgets.
+- `act_batch()` steers all 32 mice in one matrix multiply. That's what
+  makes 250 nightly episodes per generation run in under a minute.
+
+## Follow one generation
+
+Say the school is on Level 3 (`direction`) at generation 12:
+
+```text
+1. 50 brains: the top 20% cloned as-is, the rest bred by
+   tournament + crossover + mutation.
+2. Each brain drives all 32 mice through 5 fixed 1800-frame
+   nights (same seeds every gen, so gains mean better genes).
+3. Fitness = mean frames lived, +100 if nobody is caught.
+4. Best score, death count, and population mean print to console;
+   best-per-level and the full population snapshot save to disk.
+5. Bar beaten + 5 flat gens after 10 minimum? LEVEL UP: the wall
+   for the next level derives from this clearing fitness.
+6. Otherwise: keep evolving. 15 slow gens trigger a shake-up
+   (harder mutation + fresh immigrants, elites untouched).
+   30 genuinely flat gens trigger autobar (the wall comes down
+   to already-beaten fitness, announced loudly).
+```
+
+## Reading the console
+
+```text
+Level 3 (direction) | gen 12 | best 1518.4/1575 lost 10/32 mean 1431.3 (lost 13.2) (min 10 gens, stuck 5)
+```
+
+- `best 1518.4/1575` — best brain's fitness vs the level's wall.
+- `lost 10/32` — what the best brain lost. **This is the number that matters:**
+  it should fall level by level (~12 → ~10 → ~9 → … → 0).
+- `mean 1431.3 (lost 13.2)` — whole-population average; rising means
+  the school is converging, not just one lucky brain.
+- `stuck 5` — gens since a real (+1) gain. The plateau clock: levels exit
+  when this passes 5 with the bar beaten, shakes fire at 15, autobar at 30.
+
+Event lines: `*** LEVEL UP ***` (with `[wall]` = the derived next bar),
+`[shake]` (rescue diversity, nothing proven is risked), `[autobar]`
+(wall lowered to beaten fitness — always a clean multiple of 25).
+
 ## Two ways to run
 
 - `python main.py` — trains all levels headless (no window, console only)
@@ -40,12 +91,13 @@ around it.
   replay with level-up cards in between. `SPACE` jumps ahead.
   `python main.py showcase 2 5` replays just those levels.
 - Background: `MAX_GENS=200 nohup python main.py > train.log 2>&1 &`
-- `RESUME=1 python main.py` — picks up level/gen/population from
-  `checkpoints/resume.pt`. A killed night loses nothing.
-- `[autobar]` — if a level stalls 30 gens, its bar drops to the median of
-  recent bests rounded down to a multiple of 25 (announced on console).
-  The new bar is always already-beaten fitness, so a flat plateau clears
-  instead of grinding. Walls lower themselves; no night is ever wasted
+- Resume after stopping (`Ctrl+C` is safe — every generation snapshots):
+  `RESUME=1 python main.py` (bash) or
+  `$env:RESUME = "1"; python main.py` (PowerShell).
+- `[autobar]` — if a level sits 30+ genuinely flat gens, its bar drops to the
+  median of recent bests rounded down to a multiple of 25 (announced on
+  console). The new bar is always already-beaten fitness, so a flat plateau
+  clears instead of grinding. Walls lower themselves; no night is ever wasted
   on an unreachable number.
 
 ## Run it
@@ -63,14 +115,17 @@ frame-counted, so only replay pace changes. Run one trainer per folder
 
 ## The 6 levels
 
-| Level | New sense | To pass |
+| Level | New sense | Wall |
 |---|---|---|
-| 1 · blind | nothing (just `bias`) | 1100 |
-| 2 · proximity | how close the owl is | 1150 |
-| 3 · direction | where it's coming from | 1230 |
-| 4 · intent | is it closing in | 1300 (then auto) |
-| 5 · walls | where the edges are | auto: L4 best + notch |
-| 6 · full sense | exact owl position | auto: L5 best + notch (finale) |
+| 1 · blind | nothing (just `bias`) | 1100, fixed |
+| 2 · proximity | how close the owl is (`dist`) | from L1's clearing |
+| 3 · direction | where it's coming from (`dir x, dir y`) | from L2's clearing |
+| 4 · intent | is it closing in (`closing`) | from L3's clearing |
+| 5 · walls | where the edges are (`wall ↑↓→←`) | from L4's clearing |
+| 6 · full sense | exact owl position (`aim x, aim y`) | from L5's clearing (finale) |
+
+Only L1's wall is a fixed guess. Every later wall is derived at level-up:
+clearing fitness snapped up to the next multiple of 25, +25 on top.
 
 ## Reading the screen
 
@@ -90,8 +145,9 @@ Env knobs: `MAX_GENS` (cap a session) · `RESUME=1` (pick up where it died) ·
 
 ## If it gets stuck
 
-It unsticks itself: 30 stalled generations triggers `[autobar]`, which drops
-the bar to already-beaten fitness (median of recent bests, snapped down to
-a multiple of 25). Falling `lost-mean` in the console means it's learning. Interrupted? `RESUME=1 python main.py` picks up
-where it died. Fresh physics change? Delete `checkpoints/` and
+It unsticks itself: 15 slow generations triggers `[shake]`, 30 flat ones
+triggers `[autobar]`, which drops the bar to already-beaten fitness (median
+of recent bests, snapped down to a multiple of 25). Falling `lost-mean` in
+the console means it's learning. Interrupted? `RESUME=1 python main.py`
+picks up where it died. Fresh physics change? Delete `checkpoints/` and
 `logs/fitness.csv` and restart clean so old walls don't linger.
