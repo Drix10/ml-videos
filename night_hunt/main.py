@@ -66,8 +66,6 @@ def _check_config():
         bad.append("OWL/MOUSE_SPEED > 0")
     if not 0 < config.ELITE_FRACTION < 1:
         bad.append("0 < ELITE_FRACTION < 1 (else the population grows itself)")
-    if config.AUTOBAR_ROUND <= 0:
-        bad.append("AUTOBAR_ROUND > 0")
     if config.AUTOBAR_WINDOW < 1:
         bad.append("AUTOBAR_WINDOW >= 1")
     if config.LEVEL_STABLE_GENS >= config.AUTOBAR_AFTER:
@@ -236,7 +234,7 @@ def main():
         return
     print("[train] headless: no window. Watch the console, "
           "record later with `python main.py showcase`.", flush=True)
-    HEADER = ["level", "generation", "best", "mean", "worst",
+    HEADER = ["level", "generation", "best", "mice", "need",
               "catch_best", "catch_mean"]
     log_path = f"{LOGD}/fitness.csv"
     if os.path.exists(log_path) and os.path.getsize(log_path):
@@ -264,8 +262,10 @@ def main():
 
     level, gen, total = 0, 0, 0
     pop = [Brain(len(config.LEVELS[0]["inputs"])) for _ in range(config.POPULATION_SIZE)]
-    bars = {}  # level -> current bar (autobar may lower a wall, loudly)
-    hist = []  # recent gen-bests at this level (autobar's evidence)
+    need = {}  # level -> champion-mean-survivors required to clear it.
+    # Whole mice only: a level is cleared by saving MORE mice, never by
+    # outliving the same body count. L1 has no entry (it IS the baseline).
+    survhist = []  # champion mean survivors per gen (autobar's evidence)
     level_best, since_improve, shake_left = -1.0, 0, 0  # plateau clock + shake state
     snap_path = f"{CKPTD}/resume.pt"
     if RESUME and os.path.exists(snap_path):
@@ -280,7 +280,8 @@ def main():
                    for _ in range(config.POPULATION_SIZE)]
             for b, sd in zip(pop, snap["pop"]):
                 b.load_state_dict(sd)  # raises on shape mismatch (config edited)
-            bars = snap.get("bars", {})
+            need = snap.get("need", {})
+            survhist = snap.get("survhist", [])
             level_best = snap.get("level_best", -1.0)
             since_improve = snap.get("since_improve", 0)
             shake_left = snap.get("shake_left", 0)
@@ -291,7 +292,7 @@ def main():
             level, gen, total = 0, 0, 0
             pop = [Brain(len(config.LEVELS[0]["inputs"]))
                    for _ in range(config.POPULATION_SIZE)]
-            bars, hist = {}, []
+            need, survhist = {}, []
             level_best, since_improve, shake_left = -1.0, 0, 0
     elif RESUME:
         print(f"[resume] no checkpoint at {snap_path}, starting fresh",
@@ -301,7 +302,8 @@ def main():
         # (or MAX_GENS-capped) night really does lose nothing — see the
         # MAX_GENS fix note further down for why this used to be false.
         torch.save({"level": level, "gen": gen, "total": total,
-                    "pop": [b.state_dict() for b in pop], "bars": bars,
+                    "pop": [b.state_dict() for b in pop], "need": need,
+                    "survhist": survhist,
                     "level_best": level_best, "since_improve": since_improve,
                     "shake_left": shake_left},
                    snap_path)
@@ -331,10 +333,13 @@ def main():
             best = pop[bi]
             lvl = config.LEVELS[level]
             last = level == len(config.LEVELS) - 1
-            bar = bars.setdefault(level, lvl["threshold"] if not last
-                                  else config.FINALE_TARGET)
-            hist.append(float(fit.max()))
-            hist = hist[-config.AUTOBAR_WINDOW:]
+            surv = config.NUM_MICE - ate[bi]  # champion's mean survivors.
+            # Fractional (mean over 5 layouts); the gate below only ever
+            # asks for whole mice, so survival time can never sneak a
+            # level through on its own.
+            survhist.append(float(surv))
+            survhist = survhist[-config.AUTOBAR_WINDOW:]
+            req = need.get(level)  # None on L1: baseline clears on plateau
             # Plateau clock BEFORE the print so `stuck N` shows this gen,
             # not last gen's. Fixed layouts + elitism => fit.max() is
             # non-decreasing within a level, so a flat clock means genuine
@@ -344,61 +349,59 @@ def main():
             else:
                 since_improve += 1
             wr.writerow([level + 1, gen, round(float(fit.max()), 1),
-                         round(float(fit.mean()), 1), round(float(fit.min()), 1),
+                         round(float(surv), 2),
+                         "" if req is None else int(req),
                          int(round(ate[bi])), round(float(ate.mean()), 1)])
             log.flush()
             best.save(f"{CKPTD}/best_L{level + 1}_gen{gen}.pt")
             prune_checkpoints()
+            need_txt = "--" if req is None else f"{req:.0f}"
             print(f"Level {level + 1} ({config.LEVELS[level]['name']}) | gen {gen} | "
-                  f"best {fit.max():.1f}/{bar:.0f} "
+                  f"best {surv:.1f}/{need_txt} mice "
                   f"lost {ate[bi]:.0f}/{config.NUM_MICE} "
-                  f"mean {fit.mean():.1f} (lost {ate.mean():.1f}) "
+                  f"(lost {ate.mean():.1f}) "
                   f"(min {config.LEVELS[level]['min_gens']} gens, "
                   f"stuck {since_improve})",
                   flush=True)
 
+            gate = req is None or surv >= req  # L1: plateau IS the mastery
+
             leveling = not last and gen + 1 >= lvl["min_gens"] \
-                and since_improve >= config.LEVEL_STABLE_GENS and fit.max() >= bar
+                and since_improve >= config.LEVEL_STABLE_GENS and gate
             finale = last and gen + 1 >= lvl["min_gens"] \
-                and since_improve >= config.LEVEL_STABLE_GENS and fit.max() >= bar
+                and since_improve >= config.LEVEL_STABLE_GENS and gate
 
             if not (leveling or finale) and gen + 1 >= config.AUTOBAR_AFTER \
-                    and len(hist) == config.AUTOBAR_WINDOW \
+                    and len(survhist) == config.AUTOBAR_WINDOW \
                     and since_improve >= config.LEVEL_STABLE_GENS:
-                # autobar is for flat-broke walls, NOT slow climbs: the plateau
-                # clause distinguishes them. Without it, autobar fires on gen
-                # count alone — e.g. L2 climbing +44 over 28 gens, 15pts from
-                # its wall, got "rescued" to a cheaper bar one gen after a
-                # +14 improvement. A level that is still improving is learning,
-                # not stuck, so the bar stays up until the climb flatlines.
-                # autobar: an unreachable wall wastes nights forever. Snap the
-                # median of recent bests DOWN to a clean multiple so the new
-                # bar is always a number already beaten (a flat plateau
-                # clears next gen instead of grinding on a near-miss).
-                new_bar = min(bar, (float(np.median(hist))
-                                    // config.AUTOBAR_ROUND) * config.AUTOBAR_ROUND)
-                if new_bar < bar - 1:
-                    print(f"[autobar] L{level + 1} bar {bar:.0f} -> "
-                          f"{new_bar:.0f} after {gen + 1} gens here "
+                # Lower the REQUIREMENT, not a number: hold the whole mice
+                # this plateau already averages (floor of the median), so a
+                # flat school certifies what it holds instead of grinding.
+                # Mice, not fitness: time alone can never trigger this exit.
+                # L1 has no requirement (req None) so there is nothing to
+                # lower -- it exits on plateau by design.
+                new_need = int(float(np.median(survhist)))
+                if req is not None and new_need < req:
+                    print(f"[autobar] L{level + 1} needs {new_need:.0f} mice "
+                          f"(was {req:.0f}) after {gen + 1} gens here "
                           f"(stuck {since_improve})",
                           flush=True)
-                    bars[level] = bar = new_bar
+                    need[level] = req = new_need
                     # Re-derive with the SAME gate as above (min_gens and the
                     # plateau clause both included). autobar only fires after
-                    # AUTOBAR_AFTER stuck gens, well past LEVEL_STABLE_GENS,
+                    # AUTOBAR_AFTER flat gens, well past LEVEL_STABLE_GENS,
                     # so that clause is always true here in practice -- keep
                     # it explicit anyway instead of relying on that staying
                     # true across future config edits.
+                    gate = surv >= req
                     leveling = not last and gen + 1 >= lvl["min_gens"] \
-                        and since_improve >= config.LEVEL_STABLE_GENS \
-                        and fit.max() >= bar
+                        and since_improve >= config.LEVEL_STABLE_GENS and gate
                     finale = last and gen + 1 >= lvl["min_gens"] \
-                        and since_improve >= config.LEVEL_STABLE_GENS \
-                        and fit.max() >= bar
+                        and since_improve >= config.LEVEL_STABLE_GENS and gate
 
             # Stagnation shake: fires when a plateau (since_improve already
-            # nonzero) has run SHAKE_AFTER gens past that without the bar
-            # ever getting crossed -- i.e. only when the ordinary plateau
+            # nonzero) has run SHAKE_AFTER gens past that without the gate
+            # ever opening -- i.e. only when the ordinary plateau
             # gate above did NOT just clear the level. Retriggers every
             # SHAKE_AFTER gens for as long as the stall continues, each time
             # giving the search a fresh burst of diversity before falling
@@ -428,23 +431,16 @@ def main():
                 print(f"*** LEVEL UP -> Level {level + 2}: "
                       f"{config.LEVELS[level + 1]['name']} ***", flush=True)
                 level += 1
-                # Next wall from THIS clearing fitness: next clean multiple
-                # of AUTOBAR_ROUND above it, plus one notch -- always
-                # exactly one step above what this population just proved
-                # capable of. Reachable, never a fantasy number pulled from
-                # nowhere, and never a fractional/odd-looking value either.
-                bars[level] = min(
-                    (float(fit.max()) // config.AUTOBAR_ROUND + 1)
-                    * config.AUTOBAR_ROUND + config.NEXT_BAR_MARGIN,
-                    config.EPISODE_LENGTH + config.SURVIVE_BONUS)  # max
-                    # achievable: a perfect school scores exactly this. Without
-                    # the clamp, clearing at 1900 would set an unpassable 1950
-                    # wall and burn 30 gens before autobar rescues it.
-                print(f"[wall] L{level + 1} bar set to {bars[level]:.0f} "
-                      f"(cleared L{level} at {fit.max():.0f})", flush=True)
+                # Next requirement from THIS clearing school: one whole mouse
+                # more than it averages (fractionals don't count), capped at
+                # the full school. Fitness still ranks brains for selection;
+                # only mice open doors.
+                need[level] = min(int(surv) + 1, config.NUM_MICE)
+                print(f"[wall] L{level + 1} must save {need[level]}+ mice "
+                      f"(cleared L{level} at {surv:.1f})", flush=True)
                 pop = level_up_population(pop, fit, len(config.LEVELS[level]["inputs"]))
                 gen = 0
-                hist = []
+                survhist = []
                 level_best, since_improve, shake_left = -1.0, 0, 0
                 save_snapshot()
                 if MAX_GENS and total >= MAX_GENS:
@@ -459,9 +455,9 @@ def main():
                 # A later `RESUME` picks up here and can keep polishing
                 # the finale level if you want to push fit.max() higher.
                 save_snapshot()
-                print(f"*** FINALE CLEARED ({fit.max():.0f} >= "
-                      f"{bar:.0f}) — run `python main.py showcase` "
-                      f"to record the video ***", flush=True)
+                print(f"*** FINALE CLEARED ({surv:.1f} mice) — run "
+                      f"`python main.py showcase` to record the video ***",
+                      flush=True)
                 return
 
             pop = next_generation(

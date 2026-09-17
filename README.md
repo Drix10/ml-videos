@@ -1,7 +1,7 @@
 <h1 align="center">ml-videos</h1>
 
 <p align="center">
-  <strong>A lab for machine-learning videos.</strong><br />
+  <strong>A vibe coded lab for machine-learning videos.</strong><br />
   Small brains, visible struggle, big learning curves — real training runs rendered as watchable videos.
 </p>
 
@@ -54,7 +54,7 @@ Future projects take the same shape in new worlds — anything in this spirit: f
 2. Fix the physics first, then never touch it again mid-project.
 3. Design the curriculum: what does the final brain know that the first one doesn't?
 4. Build the smallest brain + the fastest headless trainer that can teach it.
-5. Add failsafes so training ends on its own: plateau gates, rescue shakes, honest bars.
+5. Add failsafes so training ends on its own: plateau gates, rescue shakes, survivor-denominated bars.
 6. Train once, fully. Watch the numbers, not the screen.
 7. Replay the checkpoints, record the window, cut the video.
 ```

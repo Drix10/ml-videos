@@ -53,10 +53,11 @@ def _episode_step(brain, owl, mice, level_idx, obs_buf=None):
 
 
 def _fitness(mice, caught):
-    fit = sum(m.survived for m in mice) / max(len(mice), 1)
-    if caught == 0:  # untouched school earns the bonus
-        fit += config.SURVIVE_BONUS
-    return fit
+    # Deaths dominate, time breaks ties: one extra survivor (+1000) always
+    # beats any survival-time gain (max ~1800). The GA must save mice first
+    # and keep them alive longer second — that order IS the video's story.
+    return ((len(mice) - caught) * config.SURVIVOR_WEIGHT
+            + sum(m.survived for m in mice) / max(len(mice), 1))
 
 
 def simulate(brain, level_idx, rng=None, steps=config.EPISODE_LENGTH,

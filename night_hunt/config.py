@@ -52,33 +52,30 @@ MUTATION_STRENGTH = 0.07  # small steps: keeps children near parents (heritable)
 ELITE_FRACTION = 0.2
 EPISODE_LENGTH = 1800  # 30s at 60fps
 
-# Fitness shaping
-SURVIVE_BONUS = 100.0  # nobody caught before timeout
+# Fitness shaping: deaths dominate, survival time breaks ties
+SURVIVOR_WEIGHT = 1000  # one saved mouse outweighs any time gain (max ~1800)
 RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
-FINALE_TARGET = 1800  # fallback only: normally overridden by the dynamic
-                       # wall below the moment training reaches the finale
 
-# Level exits: never cut a rising curve. A beaten bar still trains until the
+# Level exits: never cut a rising curve. An earned gate still trains until the
 # best flatlines (no gain >= LEVEL_IMPROVE_EPS for LEVEL_STABLE_GENS gens).
 # Fixed layouts + elitism make best non-decreasing within a level (the same
 # elite, scored on the same episodes, can't score worse), so a flat clock
 # means a genuine plateau, not noise. This is the fix for levels exiting the
 # instant a threshold was crossed by luck, before the school actually
-# mastered that level's sense.
-LEVEL_STABLE_GENS = 5    # flat gens (after min_gens) before a beaten bar opens the door
+# mastered that level's sense. A cleared gate still trains until the best
+# flatlines, so rising curves are never cut short.
+LEVEL_STABLE_GENS = 5    # flat gens (after min_gens) before an earned gate opens
 LEVEL_IMPROVE_EPS = 1.0  # gains smaller than this don't reset the plateau clock
 
-# Dynamic walls: L2..L6's bar is built from the PREVIOUS level's clearing
-# fitness (next clean multiple of AUTOBAR_ROUND above it, + NEXT_BAR_MARGIN)
-# instead of a fixed guess pulled from nowhere. Only L1's threshold below is
-# a fixed number now; it only has to be low enough that "blind" mice, who
-# have nothing to work with but bias, can clear it at all.
-AUTOBAR_AFTER = 30    # stuck gens at one level before its wall lowers (backstop)
-AUTOBAR_WINDOW = 10   # recent gen-bests forming the evidence
-AUTOBAR_ROUND = 25    # bars snap to multiples of this -- no odd numbers
-NEXT_BAR_MARGIN = 25  # new wall = clearing fitness snapped up + this notch
+# Survivor gates: each level must save one whole mouse more than the
+# previous level's clearing average (fractional means don't count) -- time
+# alone can never open a door. L1 is the baseline and clears on plateau;
+# the finale caps at the full school of 32. An unreachable gate wastes
+# nights forever, so autobar below stays as the loud last resort.
+AUTOBAR_AFTER = 30    # flat gens at one level before its requirement lowers
+AUTOBAR_WINDOW = 10   # recent champion survivor-counts forming the evidence
 
 # Stagnation shake: the plateau gate above answers "has this level's fitness
 # stopped moving" -- it can't tell a genuine ceiling from a GA that's simply
@@ -95,24 +92,21 @@ SHAKE_MUTATION_MULT = 4.0   # temporary multiplier on rate + strength
 SHAKE_IMMIGRANTS = 0.2      # fraction of the population replaced with fresh random brains
 SHAKE_DURATION = 5          # generations the boost stays in effect
 
-# --- Level progression: each level grows the prey's senses. Only L1's
-# threshold below is used as-is; every later level's real bar is set
-# dynamically at level-up time (see NEXT_BAR_MARGIN above and the [wall]
-# line on the console) from what the population just proved it could do. ---
+# --- Level progression: each level grows the prey's senses. Clearing one
+# level demands one more saved mouse than the last clearing average (see the
+# [wall] line on the console) -- the ladder measures the school against
+# itself, in mice, never in abstract fitness. ---
 LEVELS = [
-    {"name": "blind",     "inputs": ["bias"],
-     "threshold": 1100, "min_gens": 10},
-    {"name": "proximity", "inputs": ["bias", "dist"],
-     "threshold": 1150, "min_gens": 10},
+    {"name": "blind",     "inputs": ["bias"], "min_gens": 10},
+    {"name": "proximity", "inputs": ["bias", "dist"], "min_gens": 10},
     {"name": "direction", "inputs": ["bias", "dist", "dir x", "dir y"],
-     "threshold": 1230, "min_gens": 10},
+     "min_gens": 10},
     {"name": "intent",    "inputs": ["bias", "dist", "dir x", "dir y", "closing"],
-     "threshold": 1300, "min_gens": 10},
+     "min_gens": 10},
     {"name": "walls",     "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                      "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190"],
-     "threshold": 1550, "min_gens": 10},
+     "min_gens": 10},
     {"name": "full sense", "inputs": ["bias", "dist", "dir x", "dir y", "closing",
                                       "wall \u2191", "wall \u2193", "wall \u2192", "wall \u2190",
-                                      "aim x", "aim y"],
-     "threshold": float("inf"), "min_gens": 10},  # finale bar is set dynamically
+                                      "aim x", "aim y"], "min_gens": 10},
 ]

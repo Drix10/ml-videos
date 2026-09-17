@@ -17,7 +17,9 @@ around it.
 ## How it works (simple version)
 
 - Every mouse in a school runs the **same brain**: senses in, turn direction out.
-- One episode = 1800 frames (30s) of owl vs school. Score = mean frames lived.
+- One episode = 1800 frames (30s) of owl vs school. Score = living mice x 1000
+  + mean frames lived: **deaths dominate, time breaks ties**. One extra
+  survivor (+1000) always beats any survival-time gain (max ~1800).
 - The owl (2.2) is slower than mice (3.0) and only a true hit counts
   (catch radius 7), so fleeing straight away genuinely escapes — while blind
   drifters still get vacuumed (~14/32). That gap is what each new sense
@@ -25,11 +27,11 @@ around it.
   Skilled flee-plus-wall play is literally untouchable (0/32).
 - Each brain plays 5 identical layouts per generation (fair comparison).
 - Best 20% survive unchanged. The rest are bred from winners + small mutations.
-- A level clears after 10+ generations with the bar beaten AND the best
-  flatlined (no +1 gain for 5 gens) — rising curves are never cut short.
-  Each new wall is built from the clearing fitness: next multiple of 25
-  above it, +25 (`[wall]` on console). The ladder measures the school
-  against itself; brains grow the next sense, keeping everything learned.
+- A level clears after 10+ generations with one more saved mouse earned AND
+  the best flatlined (no +1 gain for 5 gens) — rising curves are never cut
+  short. Each new requirement is one whole mouse above the clearing average
+  (`[wall]` on console). The ladder measures the school against itself, in
+  mice; brains grow the next sense, keeping everything learned.
 
 ## What's inside the brain
 
@@ -53,39 +55,44 @@ Say the school is on Level 3 (`direction`) at generation 12:
    tournament + crossover + mutation.
 2. Each brain drives all 32 mice through 5 fixed 1800-frame
    nights (same seeds every gen, so gains mean better genes).
-3. Fitness = mean frames lived, +100 if nobody is caught.
+3. Fitness = living mice x 1000 + mean frames lived (deaths dominate,
+   time breaks ties).
 4. Best score, death count, and population mean print to console;
    best-per-level and the full population snapshot save to disk.
-5. Bar beaten + 5 flat gens after 10 minimum? LEVEL UP: the wall
-   for the next level derives from this clearing fitness.
+5. One more mouse saved + 5 flat gens after 10 minimum? LEVEL UP: the next
+   level must save one more mouse than this clearing average.
 6. Otherwise: keep evolving. 15 slow gens trigger a shake-up
    (harder mutation + fresh immigrants, elites untouched).
-   30 genuinely flat gens trigger autobar (the wall comes down
+   30 genuinely flat gens trigger autobar (the requirement drops to the
+   whole mice this plateau already holds — time alone can never exit).
    to already-beaten fitness, announced loudly).
 ```
 
 ## Reading the console
 
 ```text
-Level 3 (direction) | gen 12 | best 1518.4/1575 lost 10/32 mean 1431.3 (lost 13.2) (min 10 gens, stuck 5)
+Level 1 (blind) | gen 0 | best 21.0/-- mice lost 11/32 (lost 14.4) (min 10 gens, stuck 0)
 ```
 
-- `best 1518.4/1575` — best brain's fitness vs the level's wall.
+- `best 21.0/-- mice` — champion's mean survivors vs the mice required.
+  L1 shows `--`: the baseline clears on plateau alone. Fitness still ranks
+  brains behind the scenes (1000 per mouse + time), but only mice open
+  doors — the same 21 survivors with better time can never advance a level.
 - `lost 10/32` — what the best brain lost. **This is the number that matters:**
   it should fall level by level (~12 → ~10 → ~9 → … → 0).
 - `mean 1431.3 (lost 13.2)` — whole-population average; rising means
   the school is converging, not just one lucky brain.
 - `stuck 5` — gens since a real (+1) gain. The plateau clock: levels exit
-  when this passes 5 with the bar beaten, shakes fire at 15, autobar at 30.
+  when this passes 5 with the gate earned, shakes fire at 15, autobar at 30.
 
-Event lines: `*** LEVEL UP ***` (with `[wall]` = the derived next bar),
+Event lines: `*** LEVEL UP ***` (with `[wall]` = the next mice requirement),
 `[shake]` (rescue diversity, nothing proven is risked), `[autobar]`
-(wall lowered to beaten fitness — always a clean multiple of 25).
+(requirement lowered to the whole mice the plateau already holds).
 
 ## Two ways to run
 
 - `python main.py` — trains all levels headless (no window, console only)
-  until the L6 finale wall (set from L5's clearing fitness) clears.
+  until the L6 finale gate (one more mouse past L5's clearing, max 32) clears.
   Leave it running; close anytime.
 - `python main.py showcase` — the finished video: each level's all-time best
   replay with level-up cards in between. `SPACE` jumps ahead.
@@ -94,11 +101,10 @@ Event lines: `*** LEVEL UP ***` (with `[wall]` = the derived next bar),
 - Resume after stopping (`Ctrl+C` is safe — every generation snapshots):
   `RESUME=1 python main.py` (bash) or
   `$env:RESUME = "1"; python main.py` (PowerShell).
-- `[autobar]` — if a level sits 30+ genuinely flat gens, its bar drops to the
-  median of recent bests rounded down to a multiple of 25 (announced on
-  console). The new bar is always already-beaten fitness, so a flat plateau
-  clears instead of grinding. Walls lower themselves; no night is ever wasted
-  on an unreachable number.
+- `[autobar]` — if a level sits 30+ genuinely flat gens, its requirement drops
+  to the whole mice the plateau already averages (floor of the median,
+  announced on console). A flat school certifies what it holds instead of
+  grinding; time alone can never trigger this exit.
 
 ## Run it
 
@@ -117,15 +123,16 @@ frame-counted, so only replay pace changes. Run one trainer per folder
 
 | Level | New sense | Wall |
 |---|---|---|
-| 1 · blind | nothing (just `bias`) | 1100, fixed |
-| 2 · proximity | how close the owl is (`dist`) | from L1's clearing |
-| 3 · direction | where it's coming from (`dir x, dir y`) | from L2's clearing |
-| 4 · intent | is it closing in (`closing`) | from L3's clearing |
-| 5 · walls | where the edges are (`wall ↑↓→←`) | from L4's clearing |
-| 6 · full sense | exact owl position (`aim x, aim y`) | from L5's clearing (finale) |
+| 1 · blind | nothing (just `bias`) | baseline, clears on plateau |
+| 2 · proximity | how close the owl is (`dist`) | +1 mouse over L1's clearing |
+| 3 · direction | where it's coming from (`dir x, dir y`) | +1 mouse over L2's clearing |
+| 4 · intent | is it closing in (`closing`) | +1 mouse over L3's clearing |
+| 5 · walls | where the edges are (`wall ↑↓→←`) | +1 mouse over L4's clearing |
+| 6 · full sense | exact owl position (`aim x, aim y`) | +1 mouse over L5's clearing (finale) |
 
-Only L1's wall is a fixed guess. Every later wall is derived at level-up:
-clearing fitness snapped up to the next multiple of 25, +25 on top.
+Only L1 has no requirement. Every later level must save one whole mouse more
+than the previous clearing average (fractionals don't count), capped at 32.
+The finale is simply the last such gate.
 
 ## Reading the screen
 
@@ -146,8 +153,7 @@ Env knobs: `MAX_GENS` (cap a session) · `RESUME=1` (pick up where it died) ·
 ## If it gets stuck
 
 It unsticks itself: 15 slow generations triggers `[shake]`, 30 flat ones
-triggers `[autobar]`, which drops the bar to already-beaten fitness (median
-of recent bests, snapped down to a multiple of 25). Falling `lost-mean` in
-the console means it's learning. Interrupted? `RESUME=1 python main.py`
+triggers `[autobar]`, which lowers the mice requirement to what the plateau
+already holds. Falling `lost-mean` in the console means it's learning. Interrupted? `RESUME=1 python main.py`
 picks up where it died. Fresh physics change? Delete `checkpoints/` and
 `logs/fitness.csv` and restart clean so old walls don't linger.
