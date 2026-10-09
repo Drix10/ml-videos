@@ -92,5 +92,7 @@ if __name__ == "__main__":  # ponytail: one runnable check, no test framework
     assert np.allclose(g.fc1.weight.data[:, :1].numpy(),
                        b.fc1.weight.data.numpy())
     c = Brain.crossover(g, Brain(4)); c.mutate()
-    b.save("/tmp/_brain_test.pt"); Brain.load("/tmp/_brain_test.pt", 1)
+    import os, tempfile  # portable: /tmp doesn't exist on Windows
+    tmp = os.path.join(tempfile.gettempdir(), "_brain_test.pt")
+    b.save(tmp); Brain.load(tmp, 1); os.remove(tmp)
     print("model ok")

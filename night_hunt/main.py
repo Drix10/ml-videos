@@ -21,8 +21,6 @@ from environment import Arena, simulate
 from evolution import next_generation
 from model import Brain
 
-os.makedirs("checkpoints", exist_ok=True)
-os.makedirs("logs", exist_ok=True)
 LOGD = os.environ.get("LOG_DIR", "logs")  # smoke tests point these at /tmp
 CKPTD = os.environ.get("CKPT_DIR", "checkpoints")
 os.makedirs(LOGD, exist_ok=True)
@@ -70,6 +68,9 @@ def _check_config():
         bad.append("AUTOBAR_WINDOW >= 1")
     if config.SHOWCASE_LEVEL_SECS <= 0:
         bad.append("SHOWCASE_LEVEL_SECS > 0")
+    if config.SURVIVOR_WEIGHT <= config.EPISODE_LENGTH * config.EVAL_EPISODES:
+        bad.append("SURVIVOR_WEIGHT > EPISODE_LENGTH * EVAL_EPISODES "
+                   "(else survival time can outrank a saved mouse)")
     if config.LEVEL_STABLE_GENS >= config.AUTOBAR_AFTER:
         bad.append("LEVEL_STABLE_GENS < AUTOBAR_AFTER")
     if config.SHAKE_AFTER < 1:
@@ -86,24 +87,31 @@ def _check_config():
 _check_config()
 
 
-def prune_checkpoints():
-    import csv as _csv
-    keep = set()  # each level's all-time best must survive for showcase
+def best_per_level():
+    """level -> (gen, fit) of each level's all-time best row in fitness.csv.
+    Empty if there's no log yet. Partial rows from a killed run are skipped,
+    never fatal -- both the pruner and the showcase read through here."""
+    best = {}
     try:
         with open(f"{LOGD}/fitness.csv") as f:
-            best = {}
-            for row in _csv.DictReader(f):
+            for row in csv.DictReader(f):
                 try:
                     lv, g = int(row["level"]), int(row["generation"])
                     ft = float(row["best"])
                 except (KeyError, TypeError, ValueError):
-                    continue  # partial row from a killed run: skip, don't crash
+                    continue
                 if lv not in best or ft > best[lv][1]:
                     best[lv] = (g, ft)
-            keep = {os.path.normpath(f"{CKPTD}/best_L{lv}_gen{g}.pt")
-                    for lv, (g, _) in best.items()}
     except FileNotFoundError:
         pass
+    return best
+
+
+def prune_checkpoints():
+    # each level's all-time best + every showcase pick must survive
+    keep = {os.path.normpath(f"{CKPTD}/best_L{lv}_gen{g}.pt")
+            for lv, (g, _) in best_per_level().items()}
+    keep |= {os.path.normpath(p) for p, _ in config.SHOWCASE_PICKS.values()}
     files = sorted(glob.glob(f"{CKPTD}/best_*.pt"), key=os.path.getmtime)
     for f in files[:max(0, len(files) - config.MAX_CHECKPOINTS)]:
         if os.path.normpath(f) not in keep:
@@ -186,30 +194,25 @@ def showcase(screen, panel, game, clock, only=(), live=True, sink=None,
     """Train-headless workflow: replay each level's all-time best school once.
     only: optional level numbers (e.g. showcase 2 5). catch(), when
     given, fires on the exact frame the owl lands a mouse."""
-    import csv as _csv
-    best = {}  # level -> (gen, fit)
-    try:
-        with open(f"{LOGD}/fitness.csv") as f:
-            for row in _csv.DictReader(f):
-                lv, g, ft = int(row["level"]), int(row["generation"]), float(row["best"])
-                if lv not in best or ft > best[lv][1]:
-                    best[lv] = (g, ft)
-    except FileNotFoundError:
-        print("[showcase] no logs/fitness.csv yet — train first", flush=True)
+    best = best_per_level()  # level -> (gen, fit); picks need no log at all
+    levels = sorted(set(best) | set(config.SHOWCASE_PICKS))
+    if not levels:
+        print(f"[showcase] no picks and no {LOGD}/fitness.csv — train first",
+              flush=True)
         return
     played = False
-    for lv in sorted(best):
+    for lv in levels:
         if only and lv not in only:
             continue
         if played and not only:  # level-up card stitches the story together
             if show_card(screen, clock, lv - 1, live, sink, sc):
                 return
         played = True
-        g, ft = best[lv]
         pick = config.SHOWCASE_PICKS.get(lv)
         try:
             n_in = len(config.LEVELS[lv - 1]["inputs"])
             if pick is None:
+                g, ft = best[lv]
                 brain = Brain.load(f"{CKPTD}/best_L{lv}_gen{g}.pt", n_in)
                 seed, tag = (lv, 0), f"gen {g} (fit {ft:.0f})"
             else:  # hand-picked take (the flawless finale): file + seed
@@ -217,8 +220,7 @@ def showcase(screen, panel, game, clock, only=(), live=True, sink=None,
                 brain = Brain.load(ckpt, n_in)
                 tag = ckpt.split("/")[-1]
         except (FileNotFoundError, RuntimeError) as ex:
-            print(f"[showcase] L{lv} gen {g} unreadable ({ex}), skipping",
-                  flush=True)
+            print(f"[showcase] L{lv} unreadable ({ex}), skipping", flush=True)
             continue
         print(f"[showcase] Level {lv} {tag} — SPACE for next", flush=True)
         arena = Arena(brain, lv - 1,
@@ -276,7 +278,7 @@ def video(only=(), out="night_hunt.mp4", scale=2):
         print("[video] ffmpeg not found -- https://ffmpeg.org/download.html",
               flush=True)
         return
-    pygame.init()  # dummy driver: surfaces + fonts, no window
+    pygame.init()  # no set_mode: plain surfaces + fonts, no window
     visualizer.S = scale  # every stroke scales; caches key on device px
     W, H = config.WIDTH * scale, config.HEIGHT * scale
     screen = pygame.Surface((W, H))
@@ -291,21 +293,36 @@ def video(only=(), out="night_hunt.mp4", scale=2):
            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
            "-crf", "17", "-preset", "medium",
            "-movflags", "+faststart", out]
-    proc = _sp.Popen(cmd, stdin=_sp.PIPE, stdout=_sp.DEVNULL,
-                     stderr=_sp.DEVNULL)
+    # -v error keeps stderr tiny (no progress spam), so a PIPE can't fill
+    # up and stall the render; it's only read if ffmpeg actually fails.
+    proc = _sp.Popen(cmd[:1] + ["-v", "error"] + cmd[1:], stdin=_sp.PIPE,
+                     stdout=_sp.DEVNULL, stderr=_sp.PIPE)
+    wall = [0]  # EVERY drawn frame (cards too): the soundtrack clock.
+    # showcase's old frame counter skipped cards, so the wav ran ~7s
+    # short and -shortest chopped the finale -- wall clock never lies.
+    # The same counter drives the visualizer's animations, so the mp4 is
+    # frame-identical on every render regardless of machine speed.
+    visualizer.now_ms = lambda: wall[0] * 1000 // config.FPS
+    catches = []
     try:  # one frame in flight: no disk bloat, ~1min render for ~1min video
-        wall = [0]  # EVERY drawn frame (cards too): the soundtrack clock.
-        # showcase's old frame counter skipped cards, so the wav ran ~7s
-        # short and -shortest chopped the finale -- wall clock never lies.
         def grab():
             proc.stdin.write(pygame.image.tostring(screen, "RGB"))
             wall[0] += 1
-        catches = []
         showcase(screen, panel, game, None, only, False, grab, scale,
                  lambda: catches.append(wall[0]))
+    except BrokenPipeError:
+        pass  # ffmpeg died mid-render; its own error is reported below
     finally:
-        proc.stdin.close()
+        try:
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        err = proc.stderr.read().decode(errors="replace").strip()
         proc.wait()
+    if proc.returncode != 0:
+        print(f"[video] ffmpeg failed ({proc.returncode}): {err}", flush=True)
+        pygame.quit()
+        return
     if catches and wall[0]:  # lay the gulps onto the timeline, mux, done
         import wave as _wv
         rate = 22050
@@ -322,12 +339,19 @@ def video(only=(), out="night_hunt.mp4", scale=2):
             f.setsampwidth(2)
             f.setframerate(rate)
             f.writeframes(track.tobytes())
-        _sp.run(["ffmpeg", "-y", "-i", out, "-i", wav, "-c:v", "copy",
-                 "-c:a", "aac", "-b:a", "128k", "-shortest", tmp],
-                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
-        os.replace(tmp, out)
+        mux = _sp.run(["ffmpeg", "-y", "-v", "error", "-i", out, "-i", wav,
+                       "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+                       "-shortest", tmp],
+                      stdout=_sp.DEVNULL, stderr=_sp.PIPE)
         os.remove(wav)
-        print(f"[video] +{len(catches)} catch sounds", flush=True)
+        if mux.returncode == 0:
+            os.replace(tmp, out)
+            print(f"[video] +{len(catches)} catch sounds", flush=True)
+        else:  # keep the silent render rather than crash on a missing tmp
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            print("[video] audio mux failed, kept silent video: "
+                  + mux.stderr.decode(errors="replace").strip(), flush=True)
     pygame.quit()
     print(f"[video] saved {out} ({W}x{H}@{config.FPS})", flush=True)
 
@@ -506,9 +530,12 @@ def main():
             finale = last and gen + 1 >= lvl["min_gens"] \
                 and since_improve >= config.LEVEL_STABLE_GENS and gate
 
-            if not (leveling or finale) and gen + 1 >= config.AUTOBAR_AFTER \
+            # AUTOBAR_AFTER genuinely flat gens (the stuck clock), not merely
+            # that many gens at this level: a school still gaining whole
+            # mice every few gens keeps its full requirement.
+            if not (leveling or finale) \
                     and len(survhist) == config.AUTOBAR_WINDOW \
-                    and since_improve >= config.LEVEL_STABLE_GENS:
+                    and since_improve >= config.AUTOBAR_AFTER:
                 # Lower the REQUIREMENT, not a number: hold the whole mice
                 # this plateau already averages (floor of the median), so a
                 # flat school certifies what it holds instead of grinding.

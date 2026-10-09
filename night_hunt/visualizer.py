@@ -67,6 +67,11 @@ def _vignette(w, h):
     return _vig[(w, h)]
 
 
+# Animation clock in ms. Live windows use pygame's wall clock; video()
+# swaps in a frame counter so slide-ins and pulses land on the same frames
+# no matter how fast the offscreen render runs.
+now_ms = pygame.time.get_ticks
+
 _seen = {}  # level_idx -> tick of first draw (slide-in animation)
 _lab = {}  # label surfaces: (name, gold) -> cached render
 _FLOW = {}  # brain id -> smoothed per-edge signals (temporal EMA)
@@ -95,7 +100,7 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     top = top0 + ((bot - top0) - (len(names) - 1) * gap) / 2
     pin = [(ix, top + i * gap) for i in range(len(names))]
     if new_inputs:  # new senses slide in from the left once per level
-        now0 = pygame.time.get_ticks()
+        now0 = now_ms()
         if level_idx not in _seen:
             _seen[level_idx] = now0
         p_ = min(1.0, (now0 - _seen[level_idx]) / 450.0)
@@ -168,7 +173,7 @@ def draw_network(surf, brain, obs, level_idx, new_inputs=0):
     pygame.draw.circle(surf, A, (int(X), int(Y)), 8 * S,
                        max(2, S) + int(abs(float(o_act)) * 2 * S))
 
-    now = pygame.time.get_ticks()  # new input rings pulse all level
+    now = now_ms()  # new input rings pulse all level
     for i, p in enumerate(pin):
         if i < first_new:
             continue

@@ -16,12 +16,17 @@ SHOWCASE_LEVEL_SECS = 7  # montage length per level (6x7 + cards ~= 50s reel)
 # L1 11 lost, L2 9, L3 7, L4 5, L5 3, L6 0 -- counter climbs
 # 21 -> 23 -> 25 -> 27 -> 29 -> 32, two spared per level, none at all
 # when it matters. The untouchable ending.
-SHOWCASE_PICKS = {1: ("checkpoints/best_L1_gen4.pt", (1, 3003)),
-                  2: ("checkpoints/best_L2_gen25.pt", (2, 3009)),
-                  3: ("checkpoints/best_L3_gen14.pt", (3, 5001)),
-                  4: ("checkpoints/best_L4_gen26.pt", (4, 5066)),
-                  5: ("checkpoints/best_L5_gen7.pt", (5, 5027)),
-                  6: ("checkpoints/best_L6_gen9.pt", (6, 1010))}
+# Honesty note: these are searched takes, not averages. The L6 champion
+# averages ~28.6/32 on its eval layouts; seed 1010 is a real, replayable
+# night where that same brain loses none.
+# takes/ is tracked in git (checkpoints/ is not), so a fresh clone can
+# replay the video and pruning/retraining can never delete a pick.
+SHOWCASE_PICKS = {1: ("takes/best_L1_gen4.pt", (1, 3003)),
+                  2: ("takes/best_L2_gen25.pt", (2, 3009)),
+                  3: ("takes/best_L3_gen14.pt", (3, 5001)),
+                  4: ("takes/best_L4_gen26.pt", (4, 5066)),
+                  5: ("takes/best_L5_gen7.pt", (5, 5027)),
+                  6: ("takes/best_L6_gen9.pt", (6, 1010))}
 
 # Colors: gold-on-midnight (not pink-on-black)
 BG_COLOR = (10, 13, 26)
@@ -67,14 +72,16 @@ MUTATION_STRENGTH = 0.07  # small steps: keeps children near parents (heritable)
 ELITE_FRACTION = 0.2
 EPISODE_LENGTH = 1800  # 30s at 60fps
 
-# Fitness shaping: deaths dominate, survival time breaks ties. Must exceed
-# EPISODE_LENGTH -- otherwise a mutant that saves ONE FEWER mouse but
-# survives much longer on average can out-fitness a mutant that genuinely
-# saves more, since 1000 < 1800 lets the time term flip the ordering. At
-# 2000 > EPISODE_LENGTH, one extra survivor mathematically always wins
-# regardless of the time term, so argmax(fit) always means "most mice
-# saved, longest survival among those" -- never the reverse.
-SURVIVOR_WEIGHT = 2000  # one saved mouse outweighs any time gain (max EPISODE_LENGTH)
+# Fitness shaping: deaths dominate, survival time breaks ties. Fitness is
+# averaged over EVAL_EPISODES, so mean survivors move in steps of
+# 1/EVAL_EPISODES mouse (worth SURVIVOR_WEIGHT/EVAL_EPISODES), while the
+# mean time term can differ by up to EPISODE_LENGTH. The weight must
+# therefore exceed EPISODE_LENGTH * EVAL_EPISODES (1800 * 5 = 9000), or a
+# brain saving 0.2 fewer mice per night but surviving longer outranks one
+# that genuinely saves more. At 10000, argmax(fit) always means "most mice
+# saved, longest survival among those" -- never the reverse (main.py
+# asserts this on startup).
+SURVIVOR_WEIGHT = 10000
 RESPAWN_MIN_DIST = 100  # spawn only (caught mice stay dead: countdown)
 
 MAX_CHECKPOINTS = 30
@@ -95,7 +102,7 @@ LEVEL_IMPROVE_EPS = 1.0  # gains smaller than this don't reset the plateau clock
 # alone can never open a door. L1 is the baseline and clears on plateau;
 # the finale caps at the full school of 32. An unreachable gate wastes
 # nights forever, so autobar below stays as the loud last resort.
-AUTOBAR_AFTER = 30    # flat gens at one level before its requirement lowers
+AUTOBAR_AFTER = 30    # flat gens (stuck clock) before a level's requirement lowers
 AUTOBAR_WINDOW = 10   # recent champion survivor-counts forming the evidence
 
 # Stagnation shake: the plateau gate above answers "has this level's fitness
