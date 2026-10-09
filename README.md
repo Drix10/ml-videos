@@ -43,7 +43,7 @@ Each project is a self-contained folder that obeys five rules:
 
 | Project | Struggle | Brain | Status |
 |---|---|---|---|
-| [`night_hunt`](night_hunt/) | An owl hunts 32 mice sharing one evolving brain; six senses from blind to full | 9-unit MLP, genetic algorithm | Training → video next |
+| [`night_hunt`](night_hunt/) | An owl hunts 32 mice sharing one evolving brain; six senses from blind to full | 9-unit MLP, genetic algorithm | Done: trained, 50s video rendered ([`night_hunt.mp4`](night_hunt/night_hunt.mp4)) |
 
 Future projects take the same shape in new worlds — anything in this spirit: foragers learning a map, racers learning a track, a swarm learning formation. If it can be learned by a tiny brain and *seen* being learned, it belongs here.
 
@@ -56,18 +56,19 @@ Future projects take the same shape in new worlds — anything in this spirit: f
 4. Build the smallest brain + the fastest headless trainer that can teach it.
 5. Add failsafes so training ends on its own: plateau gates, rescue shakes, survivor-denominated bars.
 6. Train once, fully. Watch the numbers, not the screen.
-7. Replay the checkpoints, record the window, cut the video.
+7. Pick the takes, then render the video straight to mp4 (offscreen, no screen recording).
 ```
 
-Steps 1–3 decide whether the video works. Steps 4–5 decide whether training finishes. Steps 6–7 are patience plus OBS.
+Steps 1–3 decide whether the video works. Steps 4–5 decide whether training finishes. Steps 6–7 are patience plus ffmpeg.
 
 ## Try the Current One
 
 ```powershell
 cd night_hunt
 python -m pip install -r requirements.txt
-python main.py             # train (headless)
-python main.py showcase    # replay (record this)
+python main.py showcase    # watch the finished video live (no training needed)
+python main.py video       # render it to a 1080x1920 mp4 (needs ffmpeg)
+python main.py             # retrain from scratch (headless, takes hours)
 ```
 
 Full console guide, failsafes, and tuning live in [`night_hunt/README.md`](night_hunt/README.md).
@@ -78,6 +79,7 @@ Full console guide, failsafes, and tuning live in [`night_hunt/README.md`](night
 |---|---|
 | `night_hunt/` | Project 01: owl vs 32 mice, shared evolving brain, six senses |
 | `night_hunt/README.md` | That project's deep dive |
+| `night_hunt/takes/` | The six trained brains the video replays (tracked, so clones render the exact video) |
 | *future folders* | One folder per video, each obeying the formula above |
 
 ## License
